@@ -1,0 +1,1 @@
+import{p as e,u as t}from"./jsx-runtime-C_xi46hj.js";var n=e(t(),1);function r(e=3e4){let[t,r]=(0,n.useState)(()=>new Date);return(0,n.useEffect)(()=>{let t=setInterval(()=>r(new Date),e);return()=>clearInterval(t)},[e]),t}export{r as t};
