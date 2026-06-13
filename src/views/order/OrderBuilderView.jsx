@@ -46,7 +46,7 @@ export default function OrderBuilderView() {
   const menuItems = useMenuStore((s) => s.items)
   const menuCategories = useMenuStore((s) => s.categories)
   const selectedCategoryId = useMenuStore((s) => s.selectedCategoryId)
-  const currency = useWorkplaceStore((s) => s.currency)
+  const currency = useWorkplaceStore((s) => s.current()?.currency ?? 'RUB')
   const currentId = useWorkplaceStore((s) => s.currentId)
 
   const [searchQuery, setSearchQuery] = useState('')

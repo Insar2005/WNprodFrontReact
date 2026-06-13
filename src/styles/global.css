@@ -131,12 +131,23 @@
   touch-action: manipulation;
 }
 
+/* СТАЛО */
 html, body {
   margin: 0;
   padding: 0;
-  overscroll-behavior-y: none;
+  /* Block horizontal scroll on the document level. Pages internally
+     are 100vw — anything wider is a bug that should be visible-not-scrollable
+     (overflow-x: hidden on .app-shell already blocks the visual, this
+     blocks the actual gesture). */
+  overscroll-behavior: none;
+  overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+
+#app {
+  /* Already exists with height. Add this if missing: */
+  overflow-x: hidden;
 }
 
 body {
@@ -2820,6 +2831,26 @@ input::placeholder, textarea::placeholder {
   -webkit-user-select: none;
   touch-action: none;
   overscroll-behavior: contain;
+}
+/* Override hardcoded SVG stroke/fill attrs from HallCanvas + HallEditorCanvas.
+   The canvases set these as attributes so we can't use tokens directly,
+   but CSS wins over the presentation attribute. Use the wrapper class
+   .hc-wrap as the scope so we don't break unrelated SVGs. */
+
+.hc-wrap svg .hc-bg {
+  fill: var(--wn-bg-elevated);
+}
+
+.hc-wrap svg defs path[stroke="#eef0f2"] {
+  stroke: var(--wn-glass-border-subtle);
+}
+
+.hc-wrap svg defs path[stroke="#dde2e7"] {
+  stroke: var(--wn-glass-border);
+}
+
+.hc-wrap svg > rect[stroke="#cfd8dc"] {
+  stroke: var(--wn-glass-border);
 }
 .hc-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .hc-bg { cursor: grab; }
