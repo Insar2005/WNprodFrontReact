@@ -3264,7 +3264,7 @@ input::placeholder, textarea::placeholder {
   display: flex;
   flex-direction: column;
   background-color: var(--wn-bg);
-  padding-bottom: 200px;
+  padding-bottom: 0px; /* will be env(safe-area-inset-bottom) when inside sheet */
 }
 .ob-header {
   display: flex;
@@ -4031,4 +4031,304 @@ input::placeholder, textarea::placeholder {
    where the accent-fill background is flat.) */
 .pf-avatar:has(.pf-avatar-img) {
   border-color: transparent;
+}
+
+/* ==========================================================================
+   MenuItemRow (mir-*) — universal row: edit + pick mode.
+   Designed June 2026 from menu redesign mockups. Layout:
+       [ⓘ] Title (badges)        portion (mute, 12px)
+                                 price (bold, accent, 15px)
+   ⓘ button on the left is pick-mode only.
+   Replaces the previous .mir-row + .mpr-row split — both now share one
+   stylesheet block, with .mir-row--in-cart for the cart-count state.
+   ========================================================================== */
+
+.mir-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px 14px;
+  background-color: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  /* The row is a <div>, not a button, because we have a nested ⓘ button
+     in pick mode and nested buttons are invalid. Tap target is governed
+     by min-height + padding (>=44px) so this is still accessible. */
+}
+.mir-row:active {
+  background-color: var(--wn-bg-recessed);
+}
+
+/* In-cart highlight — subtle, doesn't compete with active chip color.
+   Wins over the base border so the row stands out a bit. */
+.mir-row--in-cart {
+  border-color: var(--wn-accent-soft);
+  background-color: var(--wn-accent-fill);
+}
+
+/* Hidden item (edit mode only — pick mode pre-filters these out). */
+.mir-row--hidden {
+  opacity: 0.55;
+}
+
+/* ⓘ button — pick mode only. -4px left margin lets the icon visually
+   sit at the row edge while keeping a generous 32×32 tap target. */
+.mir-info-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-left: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--wn-ink-mute);
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.mir-info-btn:active {
+  background-color: var(--wn-bg-recessed);
+  color: var(--wn-ink-soft);
+}
+.mir-info-btn svg {
+  display: block;
+}
+
+/* Center column — title + optional badges (skрыто, ×N qty). */
+.mir-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mir-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--wn-ink);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* "скрыто" pill in edit mode for is_active=false items. */
+.mir-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: var(--wn-bg-recessed);
+  color: var(--wn-ink-mute);
+}
+
+/* "×N" qty badge in pick mode when this item is already in the cart. */
+.mir-qty {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--wn-accent-text);
+  background-color: var(--wn-accent-fill);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+/* Right column — portion (top, mute) + price (bottom, bold accent). */
+.mir-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+/* Without portion, the price sits vertically centered on its own — no
+   stacking modifier needed. With portion, --stacked gives a hair of
+   extra gap so price doesn't kiss the portion label. */
+.mir-right--stacked {
+  gap: 2px;
+}
+
+.mir-portion {
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  white-space: nowrap;
+}
+.mir-price {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Category header — sits under chips in MenuEditorView.
+   Replaces the smaller .menu-cat-actions row. Per designer mockup it's a
+   proper H2 with right-aligned "Изменить" link.
+   ========================================================================== */
+.cat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+.cat-header-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* ==========================================================================
+   MenuTwoPanel (mtp-*) — vertical category rail + content pane.
+   Per designer mockup (June 2026): rail uses bg-elevated with a right
+   border so it looks like a distinct sidebar; pane scrolls independently.
+   ========================================================================== */
+
+.mtp-wrap {
+  /* Fill remaining vertical space of the page. The parent (.menu-page or
+     .ob-page) is already a flex column, so flex:1 here works. */
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  /* Tuck the rail to the page edges visually — the .page wrapper adds
+     16px padding on both sides; counteract it so the rail kisses the
+     screen edge (matches the designer mockup). Pane content keeps its
+     own inner padding so text doesn't touch the rail border. */
+  margin: 0 -16px;
+}
+
+/* LEFT — category rail. */
+.mtp-rail {
+  flex: 0 0 116px;
+  background-color: var(--wn-bg-elevated);
+  border-right: 1px solid var(--wn-glass-border-subtle);
+  padding: 10px 8px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mtp-rail::-webkit-scrollbar { display: none; }
+
+.mtp-cat {
+  /* Tap target: at least 44px tall thanks to 11+22(line)+11 padding. */
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--wn-ink-soft);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  cursor: pointer;
+  /* Long names wrap to two lines inside the narrow rail rather than
+     getting truncated — keeps the user oriented. */
+  white-space: normal;
+  word-break: break-word;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  /* Dot for inactive categories sits inline with the title text. */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.mtp-cat:active {
+  background-color: var(--wn-bg-recessed);
+}
+
+.mtp-cat--active {
+  background-color: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+  font-weight: 600;
+}
+
+.mtp-cat--inactive .mtp-cat-text {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.mtp-cat-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.mtp-cat-dot {
+  flex-shrink: 0;
+  font-size: 7px;
+  color: var(--wn-ink-mute);
+  line-height: 1;
+}
+
+/* "+ Категория" — distinct from regular cats: dashed border, centered,
+   slightly indented vertically (margin-top) to separate from the list. */
+.mtp-cat-add {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 10px;
+  border: 1px dashed var(--wn-glass-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--wn-accent-text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.mtp-cat-add:active {
+  background-color: var(--wn-bg-recessed);
+}
+
+/* RIGHT — content pane. Scrolls independently of the rail. */
+.mtp-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 12px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mtp-pane::-webkit-scrollbar { display: none; }
+
+.mtp-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mtp-empty {
+  background-color: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
 }

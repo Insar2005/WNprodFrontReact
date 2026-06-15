@@ -1,23 +1,42 @@
+import { useMemo } from 'react'
+
 /**
- * Two-panel menu layout: vertical category list on the left,
- * scrollable items list on the right.
+ * Two-panel menu layout: vertical category rail on the left + scrollable
+ * content pane on the right. Replaces the horizontal CategoryChips
+ * idiom on screens that opt in.
  *
- * Used by both MenuEditorView (mode="edit") and OrderBuilderView
- * (mode="pick"). Renders the supplied `itemSlot` for each item, so each
- * caller controls the row UI (MenuItemRow vs MenuPickRow with quantity
- * badge, etc).
+ * Used by both MenuEditorView and OrderBuilderView. The caller supplies
+ * `renderItem(item)` so each screen controls its own row UI — same
+ * MenuItemRow component, just different modes (edit vs pick) and
+ * handlers.
+ *
+ * Layout (from designer mockup, June 2026):
+ *   ┌───────┬─────────────────────────────┐
+ *   │ Кат 1 │  HeaderSlot (title + link)  │
+ *   │ Кат 2 │  ─────────────────────────  │
+ *   │•Кат 3 │  Item 1                     │
+ *   │ Кат 4 │  Item 2                     │
+ *   │ ...   │  Item 3                     │
+ *   │ +Кат  │  ...                        │
+ *   └───────┴─────────────────────────────┘
+ *  116px wide   flex:1, independent scroll
  *
  * Props
- *   categories   — sorted array of category objects (already filtered).
- *   selectedId   — currently selected category id (controlled).
- *   items        — items of the selected category (caller derives via useMemo).
- *   onSelect     — (id) => void; called when a category tab is tapped.
- *   onAddCategory — () => void; shown when editable=true ("+ Категория").
- *   editable     — show the inactive-category strikethrough + "+ Категория" button.
- *   itemSlot     — (item) => ReactNode; per-item row renderer.
- *   emptyText    — text shown when items.length === 0 (default: 'Нет позиций').
- *   headerSlot   — optional ReactNode rendered above the right pane
- *                  (used by the editor for the "Изменить" link + category name).
+ *   categories    — sorted array of category objects (already filtered
+ *                   appropriately — editor passes all, pick passes
+ *                   only active).
+ *   selectedId    — currently-selected category id (controlled).
+ *   items         — items of the selected category (caller derives).
+ *   onSelect      — (id) => void; category tab tapped.
+ *   onAddCategory — () => void; only used when `editable=true`. Renders
+ *                   the "+ Категория" button at the rail's end.
+ *   editable      — show the strikethrough on inactive categories and
+ *                   the "+ Категория" tail button (editor only).
+ *   renderItem    — (item) => ReactNode; per-row renderer. Caller decides
+ *                   whether to use MenuItemRow in edit or pick mode.
+ *   emptyText     — shown when items.length === 0.
+ *   headerSlot    — optional ReactNode above the right pane (e.g. the
+ *                   "Изменить" link in the editor).
  */
 export default function MenuTwoPanel({
   categories,
@@ -26,15 +45,20 @@ export default function MenuTwoPanel({
   onSelect,
   onAddCategory,
   editable = false,
-  itemSlot,
+  renderItem,
   emptyText = 'Нет позиций',
   headerSlot = null,
 }) {
+  // Stable list of rendered categories — sorted by position is the caller's
+  // job; we just trust the order. Use useMemo only if needed; here it's a
+  // pass-through.
+  const cats = useMemo(() => categories || [], [categories])
+
   return (
     <div className="mtp-wrap">
       {/* LEFT — categories rail */}
       <nav className="mtp-rail" role="tablist" aria-label="Категории">
-        {categories.map((cat) => {
+        {cats.map((cat) => {
           const isActive = cat.id === selectedId
           const cls = [
             'mtp-cat',
@@ -46,6 +70,7 @@ export default function MenuTwoPanel({
           return (
             <button
               key={cat.id}
+              type="button"
               className={cls}
               role="tab"
               aria-selected={isActive}
@@ -63,7 +88,8 @@ export default function MenuTwoPanel({
 
         {editable && (
           <button
-            className="mtp-cat mtp-cat--add"
+            type="button"
+            className="mtp-cat-add"
             onClick={() => onAddCategory?.()}
             aria-label="Новая категория"
           >
@@ -72,7 +98,7 @@ export default function MenuTwoPanel({
         )}
       </nav>
 
-      {/* RIGHT — items pane */}
+      {/* RIGHT — content pane */}
       <div className="mtp-pane">
         {headerSlot}
         {items.length === 0 ? (
@@ -80,7 +106,7 @@ export default function MenuTwoPanel({
             <p className="empty-text">{emptyText}</p>
           </div>
         ) : (
-          <div className="mtp-items">{items.map((it) => itemSlot(it))}</div>
+          <div className="mtp-items">{items.map((it) => renderItem(it))}</div>
         )}
       </div>
     </div>
