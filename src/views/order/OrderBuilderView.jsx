@@ -9,7 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import { formatMoney } from '@/utils/format'
 import { hapticImpact } from '@/utils/telegram'
 import BottomSheet from '@/components/BottomSheet'
-import CategoryChips from '@/views/menu/CategoryChips'
+import MenuTwoPanel from '@/views/menu/MenuTwoPanel'
 import MenuPickRow from './MenuPickRow'
 import CartContent from './CartContent'
 import TablePickerSheet from './TablePickerSheet'
@@ -417,44 +417,34 @@ export default function OrderBuilderView() {
           )}
         </section>
       ) : (
-        <>
-          {allCategories.length > 0 && (
-            <CategoryChips
-              categories={activeCategories}
-              selectedId={selectedCategoryId}
-              editable={false}
-              onSelect={(id) => useMenuStore.getState().selectCategory(id)}
-              onAdd={goToMenuEditor}
+    <>
+      {activeCategories.length === 0 ? (
+        <div className="ob-empty ob-empty--centered">
+          <p>В меню нет активных категорий.</p>
+          <button className="btn-link" onClick={goToMenuEditor}>
+            Открыть редактор
+          </button>
+        </div>
+      ) : (
+        <MenuTwoPanel
+          categories={activeCategories}
+          selectedId={selectedCategoryId}
+          items={activeItems}
+          onSelect={(id) => useMenuStore.getState().selectCategory(id)}
+          emptyText="В этой категории пока нет позиций"
+          itemSlot={(item) => (
+            <MenuPickRow
+              key={item.id}
+              item={item}
+              currency={currency}
+              quantity={qtyOf(item.id)}
+              onAdd={onAddToCart}
             />
           )}
-
-          {activeCategories.length === 0 ? (
-            <div className="ob-empty ob-empty--centered">
-              <p>В меню нет активных категорий.</p>
-              <button className="btn-link" onClick={goToMenuEditor}>
-                Открыть редактор
-              </button>
-            </div>
-          ) : (
-            <div className="ob-items">
-              {activeItems.length === 0 && (
-                <div className="ob-empty ob-empty--small">
-                  <p>В этой категории нет позиций</p>
-                </div>
-              )}
-              {activeItems.map((item) => (
-                <MenuPickRow
-                  key={item.id}
-                  item={item}
-                  currency={currency}
-                  quantity={qtyOf(item.id)}
-                  onAdd={onAddToCart}
-                />
-              ))}
-            </div>
-          )}
-        </>
+        />
       )}
+    </>
+  )}
 
       <BottomSheet
         ref={cartSheetRef}

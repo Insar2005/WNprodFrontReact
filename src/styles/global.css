@@ -3559,3 +3559,476 @@ input::placeholder, textarea::placeholder {
 .tps-footer { padding: 12px 16px; border-top: 1px solid var(--wn-glass-border-subtle); }
 .tps-footer .btn { width: 100%; padding: 12px 16px; border-radius: 10px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; }
 .tps-footer .btn--ghost { background-color: var(--wn-bg); color: var(--wn-ink-soft); }
+
+/* ==========================================================================
+   MenuTwoPanel (mtp-*) — vertical category rail + items pane.
+   Used by MenuEditorView and OrderBuilderView. Two-panel idiom replaces
+   the horizontal chip strip on screens that support it.
+   ========================================================================== */
+
+.mtp-wrap {
+  display: flex;
+  gap: 8px;
+  /* Fill available vertical space without growing past it — the parent
+     pages already constrain height (.app-content scrolls). We give the
+     wrap a min-height so the rail's scroll behavior actually kicks in
+     when there are many categories. */
+  min-height: 360px;
+  /* On the order builder, the cart sheet covers the bottom — leave room
+     so the last item isn't permanently hidden behind it. Editor sets
+     padding-bottom on .menu-page so this is enough on both screens. */
+}
+
+/* LEFT — vertical category rail */
+.mtp-rail {
+  flex: 0 0 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Independent scroll so categories don't push the right pane down on
+     narrow phones with very long lists. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0 12px 0;
+}
+.mtp-rail::-webkit-scrollbar { display: none; }
+
+.mtp-cat {
+  /* Tap target: at least 44px tall for thumb-friendly tapping. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  /* Long names wrap to two lines instead of overflowing the narrow rail. */
+  white-space: normal;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.mtp-cat:active { background-color: var(--wn-bg-recessed); }
+
+.mtp-cat--active {
+  background-color: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+  font-weight: 600;
+}
+
+.mtp-cat--inactive .mtp-cat-text {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.mtp-cat-dot {
+  flex-shrink: 0;
+  font-size: 7px;
+  color: var(--wn-ink-mute);
+  line-height: 1;
+}
+
+.mtp-cat--add {
+  /* Plus button at the end of the rail in editor mode. Dashed border
+     hints "add slot" without competing with real categories. */
+  border: 1px dashed var(--wn-glass-border);
+  color: var(--wn-accent-text);
+  margin-top: 4px;
+  justify-content: center;
+  font-size: 12px;
+}
+.mtp-cat--add:active { background-color: var(--wn-bg-recessed); }
+
+/* RIGHT — items pane */
+.mtp-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Items area scrolls independently so category-tab swaps don't reset
+     the rail's scroll position. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mtp-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mtp-empty {
+  background-color: var(--wn-bg-elevated);
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+}
+/* ==========================================================================
+   ProfileView hero (pf-avatar, pf-hero*) — avatar + display name + handle.
+   Replaces the old "tg-id-row" card. The .tg-id-* classes can stay in the
+   CSS file (no harm) or be removed later — nothing else references them.
+   ========================================================================== */
+
+/* Hero block (avatar + name + handle row) — sits right under .pf-title. */
+.pf-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.pf-avatar {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  /* Border ensures contrast on accent-fill in dark theme when the fill
+     is nearly invisible. */
+  border: 1px solid color-mix(in srgb, var(--wn-accent) 20%, transparent);
+}
+
+.pf-hero-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pf-hero-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  /* Long names truncate so the layout doesn't break on absurd inputs. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-hero-handle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pf-hero-handle {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-hero-handle--mono {
+  /* Monospaced when showing the numeric tg_id — keeps the dots/digits
+     aligned and reads as a "code" rather than a name. */
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+.pf-hero-handle--muted {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.pf-hero-icon-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--wn-ink-mute);
+  transition: background-color 0.15s ease;
+}
+.pf-hero-icon-btn:active {
+  background-color: var(--wn-bg-recessed);
+}
+
+/* Title spacing — was bound to the old grid header; now standalone. */
+.pf-header {
+  margin-bottom: 24px;
+}
+.pf-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: var(--wn-ink);
+}
+
+/* ==========================================================================
+   ProfileView v2 — full design refresh matching the design reference.
+   New blocks (hero + card groups + section labels) coexist with the
+   existing AppearanceView classes (.perso-card, .swatches, .seg-btn) so
+   the inline appearance picker just works without changes.
+
+   Add this whole block to the END of src/styles/global.css.
+   Old classes (.tg-id-*, .action-row, .card--current) stay untouched —
+   leave them or strip later, they no longer render in the new profile.
+   ========================================================================== */
+
+/* ---------- Hero ---------- */
+
+.pf-header {
+  margin-bottom: 24px;
+}
+.pf-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: var(--wn-ink);
+}
+
+.pf-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.pf-avatar {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  /* Subtle border ensures contrast when accent-fill is very light on
+     light bg or very dark on dark bg. */
+  border: 1px solid color-mix(in srgb, var(--wn-accent) 20%, transparent);
+}
+
+.pf-hero-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pf-hero-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-hero-handle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pf-hero-handle {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-hero-handle--mono {
+  /* Monospaced when showing the numeric tg_id — keeps dots and digits
+     aligned. Reads as a "code" rather than a name. */
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.5px;
+}
+.pf-hero-handle--muted {
+  font-style: italic;
+  opacity: 0.7;
+}
+.pf-hero-icon-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--wn-ink-mute);
+  transition: background-color 0.15s ease;
+}
+.pf-hero-icon-btn:active {
+  background-color: var(--wn-bg-recessed);
+}
+
+/* ---------- Section label (uppercase header above each card group) ---------- */
+
+.pf-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+  margin: 20px 4px 8px;
+  /* First label sits closer to the hero (no top margin). */
+}
+.pf-hero + .pf-section-label,
+.pf-header + .pf-section-label {
+  margin-top: 18px;
+}
+
+/* ---------- Card group (rounded card with rows + dividers) ---------- */
+
+.pf-card-group {
+  background-color: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 14px;
+  overflow: hidden;
+  /* The card itself doesn't have inner padding — rows handle their own
+     padding so the dividers can stretch nearly edge-to-edge. */
+}
+.pf-card-group--spaced {
+  margin-top: 18px;
+}
+
+.pf-card-divider {
+  height: 1px;
+  background-color: var(--wn-glass-border-subtle);
+  /* Stop the divider short of the card edges so it visually aligns with
+     the start of the row text (icon ends ~46px in). */
+  margin: 0 14px;
+}
+
+/* ---------- Row inside a card group ---------- */
+
+.pf-row {
+  /* Reset button defaults so it reads as a tappable list row, not a
+     bordered button. */
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--wn-ink);
+  transition: background-color 0.15s ease;
+}
+.pf-row:active {
+  background-color: var(--wn-bg-recessed);
+}
+
+.pf-row-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wn-ink-soft);
+}
+.pf-row-icon svg {
+  display: block;
+}
+
+.pf-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Body sits in a row by default — title left, meta right (like
+     "Кофейня «Зерно» · Текущее" with "Текущее" on the right). When meta
+     wraps under the title (long name + long meta), it falls below
+     gracefully via the flex-wrap below. */
+  flex-wrap: wrap;
+}
+.pf-row-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Title takes priority — meta will shrink first. */
+  flex-shrink: 0;
+}
+.pf-row-meta {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pf-row-chev {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--wn-ink-faint);
+}
+.pf-row-chev svg {
+  display: block;
+}
+
+/* Danger variant for "Выйти" — red title, no chevron (rendered out by JSX). */
+.pf-row--danger .pf-row-icon,
+.pf-row--danger .pf-row-title {
+  color: var(--wn-danger);
+}
+
+/* ---------- Inline appearance picker spacing ---------- */
+
+/* The .perso-card / .perso-block / .swatch / .seg-btn classes already
+   exist in global.css from AppearanceView — we reuse them as-is. Just
+   make sure the spacing above it matches a section-label gap. */
+.pf-section-label + .perso-card {
+  margin-bottom: 0;
+}
+
+/* ==========================================================================
+   Avatar image (Telegram photo) inside .pf-avatar.
+   Append to global.css after the .pf-avatar block.
+   ========================================================================== */
+
+.pf-avatar-img {
+  /* Fill the parent circle exactly — preserve aspect, crop center. */
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  /* Avoid the broken-image alt-text glyph if the URL is reachable but
+     the image is empty (rare Telegram edge case). */
+  display: block;
+}
+
+/* Hide the avatar's inner border on photo mode — it competes visually
+   with the round photo edge. (Border is fine for the initial fallback,
+   where the accent-fill background is flat.) */
+.pf-avatar:has(.pf-avatar-img) {
+  border-color: transparent;
+}

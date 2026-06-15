@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkplaceStore } from '@/stores/workplace'
 import { useMenuStore } from '@/stores/menu'
-import CategoryChips from './CategoryChips'
+import MenuTwoPanel from './MenuTwoPanel'
 import MenuItemRow from './MenuItemRow'
 import CategoryFormModal from './CategoryFormModal'
 import MenuItemFormModal from './MenuItemFormModal'
@@ -167,43 +167,38 @@ export default function MenuEditorView() {
               </button>
             </div>
           ) : (
-            <>
-              <CategoryChips
-                categories={allCategories}
-                selectedId={selectedCategoryId}
-                onSelect={(id) => useMenuStore.getState().selectCategory(id)}
-                onAdd={openCategoryCreate}
-              />
-
-              {selectedCategory && (
-                <div className="menu-cat-actions">
-                  <span className="menu-cat-name">{selectedCategory.title}</span>
-                  <button
-                    className="link-btn"
-                    onClick={() => openCategoryEdit(selectedCategory)}
-                  >
-                    Изменить
-                  </button>
-                </div>
-              )}
-
-              <div className="menu-items-list">
-                {selectedItems.length === 0 ? (
-                  <div className="menu-empty">
-                    <p className="empty-text">В этой категории пока нет позиций</p>
-                  </div>
-                ) : (
-                  selectedItems.map((item) => (
-                    <MenuItemRow
-                      key={item.id}
-                      item={item}
-                      currency={currency}
-                      onEdit={openItemEdit}
-                    />
-                  ))
-                )}
+            <MenuTwoPanel
+          categories={allCategories}
+          selectedId={selectedCategoryId}
+          items={selectedItems}
+          onSelect={(id) => useMenuStore.getState().selectCategory(id)}
+          onAddCategory={openCategoryCreate}
+          editable
+          emptyText="В этой категории пока нет позиций"
+          headerSlot={
+            selectedCategory && (
+              <div className="menu-cat-actions">
+                <span className="menu-cat-name">
+                  {selectedCategory.title}
+                </span>
+                <button
+                  className="link-btn"
+                  onClick={() => openCategoryEdit(selectedCategory)}
+                >
+                  Изменить
+                </button>
               </div>
-            </>
+            )
+          }
+          itemSlot={(item) => (
+            <MenuItemRow
+              key={item.id}
+              item={item}
+              currency={currency}
+              onEdit={openItemEdit}
+            />
+          )}
+        />
           )}
 
           {!searchQuery && selectedCategoryId && (
