@@ -1,0 +1,31 @@
+/* OrderBuilder ("Новый заказ") layout fixes.
+   - Bound the page to the viewport so the category rail and items pane scroll
+     INDEPENDENTLY above the cart sheet (the route is full-screen / hideBottomNav).
+   - Reserve space at the bottom equal to the collapsed cart sheet (~180px) so the
+     last categories/items can scroll into view instead of hiding behind it.
+   - Inset the category rail from the very screen edge.
+   The `.ob-page.ob-page` doubling raises specificity so it wins over the base rule
+   regardless of stylesheet order. */
+
+.ob-page.ob-page {
+  height: 100%;
+  min-height: 0;
+}
+
+.ob-page .mtp-wrap {
+  margin: 0;
+  padding-left: 12px;
+  min-height: 0;
+}
+
+.ob-page .mtp-rail,
+.ob-page .mtp-pane {
+  padding-bottom: 200px;
+}
+
+/* When searching, the results list scrolls within the bounded page too. */
+.ob-page .ob-search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

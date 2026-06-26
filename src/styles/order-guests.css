@@ -1,0 +1,245 @@
+/* Guest selection (dialog) + guest switcher bar + per-guest cart groups. */
+
+/* ── "How many guests?" dialog ── */
+.gcd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.gcd {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: var(--wn-bg-elevated);
+  border-radius: 20px;
+  padding: 22px 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  text-align: center;
+}
+.gcd-back {
+  margin-top: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink);
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+.gcd-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--wn-ink);
+}
+.gcd-sub {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--wn-ink-mute);
+}
+.gcd-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+.gcd-num {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg);
+  color: var(--wn-ink);
+  border-radius: 14px;
+  padding: 14px 0;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.06s ease, background 0.15s ease;
+}
+.gcd-num:active {
+  transform: scale(0.95);
+  background: var(--wn-accent-bg);
+}
+.gcd-hint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--wn-ink-faint);
+}
+
+/* ── Guest switcher bar (above items) ── */
+.gb-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 2px 6px;
+}
+.gb-scroll::-webkit-scrollbar {
+  display: none;
+}
+.gb-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  background: var(--wn-bg-recessed);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gb-chip--on {
+  background: var(--wn-accent-bg);
+  border-color: var(--wn-accent);
+}
+.gb-chip-label {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--wn-ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gb-chip--on .gb-chip-label {
+  color: var(--wn-accent-ink);
+}
+.gb-chip-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.gb-chip-x {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--wn-ink-mute);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 10px 0 2px;
+  cursor: pointer;
+}
+.gb-add {
+  flex: 0 0 auto;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px dashed var(--wn-glass-border);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-accent-ink);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ── Per-guest groups in the cart — each guest is a distinct card ── */
+.cc-guest-group {
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: var(--wn-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+/* Header strip: accent-tinted so a new guest is unmistakable. */
+.cc-guest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--wn-accent-bg);
+  border-bottom: 1px solid var(--wn-glass-border-subtle);
+}
+.cc-guest-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wn-accent-ink);
+}
+.cc-guest-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.cc-guest-subtotal {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wn-accent-ink);
+}
+/* Items sit inside the card with their own padding. */
+.cc-guest-group .cc-items,
+.cc-guest-group .ods-items {
+  padding: 4px 14px;
+}
+.cc-guest-empty {
+  color: var(--wn-ink-faint);
+  font-size: 13px;
+  padding: 12px 14px;
+}
+/* Grand total — a bold standalone bar. */
+.cc-grand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding: 14px 16px;
+  background: var(--wn-bg-recessed);
+  border-radius: 16px;
+}
+.cc-grand-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--wn-ink);
+}
+.cc-grand-total {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--wn-ink);
+}
+
+/* Read-only "already in order" items shown as context when adding positions. */
+.cc-item--ctx {
+  opacity: 0.72;
+}
+.cc-item--ctx .cc-item-title {
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+}
+.cc-item--ctx .cc-item-unit {
+  color: var(--wn-accent-ink);
+}

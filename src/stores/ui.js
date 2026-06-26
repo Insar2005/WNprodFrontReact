@@ -24,6 +24,13 @@ export const useUiStore = create((set, get) => ({
   confirmDialog: null,
   promptDialog: null,
   diagnosticsOpen: false,
+  // Number of full-screen sheets/overlays currently open (e.g. the order
+  // details sheet). The floating "Взять заказ" CTA hides while > 0 so it
+  // can't overlap or be tapped through the sheet's own buttons.
+  overlayCount: 0,
+
+  pushOverlay: () => set({ overlayCount: get().overlayCount + 1 }),
+  popOverlay: () => set({ overlayCount: Math.max(0, get().overlayCount - 1) }),
 
   /**
    * Show a toast. type: 'success' | 'error' | 'info' | 'warning'

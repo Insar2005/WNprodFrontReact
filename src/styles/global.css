@@ -2558,8 +2558,10 @@ input::placeholder, textarea::placeholder {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  border: 2px solid var(--wn-glass-border);
-  background: none;
+  /* Gray border + subtle fill so the empty checkbox is visible on BOTH
+     themes — the glass border is near-white and disappears on light. */
+  border: 2px solid var(--wn-ink-faint);
+  background: var(--wn-bg-recessed);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2599,8 +2601,23 @@ input::placeholder, textarea::placeholder {
   gap: 12px;
   margin-top: 14px;
 }
-.ods-tips-label { font-size: 14px; color: var(--wn-ink-soft); }
+.ods-tips-label { font-size: 14px; color: var(--wn-ink-soft); margin-right: auto; }
 .ods-tips-input-wrap { display: flex; align-items: center; gap: 6px; }
+.ods-tips-save {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background-color: var(--wn-accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.ods-tips-save:disabled { opacity: 0.6; }
 .ods-tips-input {
   width: 100px;
   padding: 8px 10px;
@@ -2803,8 +2820,10 @@ input::placeholder, textarea::placeholder {
 .hsw-switcher::-webkit-scrollbar { display: none; }
 .hsw-tab {
   flex-shrink: 0;
-  background: none;
-  border: none;
+  /* Recessed fill + visible outline so each hall reads as a real chip,
+     not just text floating on empty space. */
+  background: var(--wn-bg-recessed);
+  border: 1px solid var(--wn-ink-faint);
   padding: 8px 14px;
   border-radius: 18px;
   font-size: 13px;
@@ -2813,10 +2832,14 @@ input::placeholder, textarea::placeholder {
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .hsw-tab:active { opacity: 0.8; }
-.hsw-tab--active { background-color: var(--wn-accent); color: #fff; }
+.hsw-tab--active {
+  background-color: var(--wn-accent);
+  border-color: var(--wn-accent);
+  color: #fff;
+}
 
 /* ==========================================================================
    HallCanvas (hc-*) — SVG map, table statuses, pulse, zoom controls.

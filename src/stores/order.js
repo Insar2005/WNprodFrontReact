@@ -151,6 +151,7 @@ export const useOrderStore = create((set, get) => ({
       id: newId(),
       table_id: draft.tableId,
       comments: draft.comments || null,
+      guests_count: draft.guestCount || 1,
       items: draft.items.map((i) => ({
         id: newId(),
         menu_item_id: i.menu_item_id,
@@ -158,6 +159,7 @@ export const useOrderStore = create((set, get) => ({
         price: i.price,
         quantity: i.quantity,
         comment: i.comment || null,
+        guest: i.guest || 1,
       })),
     }
     const order = await ordersApi.createInCurrentShift(workplaceId, body)
@@ -206,6 +208,7 @@ export const useOrderStore = create((set, get) => ({
       price: i.price,
       quantity: i.quantity,
       comment: i.comment || null,
+      guest: i.guest || 1,
     }))
     const updated = await ordersApi.addItems(orderId, newItems)
     get().replaceLocal(updated)
@@ -388,7 +391,7 @@ export const useOrderStore = create((set, get) => ({
 
   /** Initialize a fresh draft. Optionally pre-select a table. */
   startDraft: ({ tableId = null, hallId = null } = {}) => {
-    get()._setDraft({ tableId, hallId, items: [], comments: '' })
+    get()._setDraft({ tableId, hallId, items: [], comments: '', guestCount: 1 })
   },
 
   /**
@@ -408,8 +411,10 @@ export const useOrderStore = create((set, get) => ({
           price: Number(i.price),
           quantity: Number(i.quantity),
           comment: i.comment || null,
+          guest: i.guest || 1,
         })),
         comments: order.comments || '',
+        guestCount: order.guests_count || 1,
       },
     })
   },
@@ -418,21 +423,23 @@ export const useOrderStore = create((set, get) => ({
    * Start an empty ephemeral draft pinned to a table. Used by the
    * "add items to active order" flow. Ephemeral — not persisted.
    */
-  replaceDraftEphemeral: ({ tableId = null, hallId = null } = {}) => {
-    set({ draft: { tableId, hallId, items: [], comments: '' } })
+  replaceDraftEphemeral: ({ tableId = null, hallId = null, guestsCount = 1 } = {}) => {
+    set({ draft: { tableId, hallId, items: [], comments: '', guestCount: guestsCount || 1 } })
   },
 
   /**
    * Add a menu item to the draft. If it already exists with the SAME
    * comment, increment quantity; otherwise add a new line.
    */
-  addToDraft: (menuItem, { comment = null, quantity = 1 } = {}) => {
+  addToDraft: (menuItem, { comment = null, quantity = 1, guest = 1 } = {}) => {
     let d = get().draft
-    if (!d) d = { tableId: null, hallId: null, items: [], comments: '' }
+    if (!d) d = { tableId: null, hallId: null, items: [], comments: '', guestCount: 1 }
+    // Same item + same comment + same guest → bump quantity; else new line.
     const existing = d.items.find(
       (i) =>
         i.menu_item_id === menuItem.id &&
-        (i.comment || null) === (comment || null),
+        (i.comment || null) === (comment || null) &&
+        (i.guest || 1) === guest,
     )
     let items
     if (existing) {
@@ -449,6 +456,7 @@ export const useOrderStore = create((set, get) => ({
           price: menuItem.price,
           quantity,
           comment,
+          guest,
         },
       ]
     }
@@ -505,16 +513,60 @@ export const useOrderStore = create((set, get) => ({
     get()._setDraft({ ...d, items: d.items.filter((i) => i.id !== itemId) })
   },
 
+  /**
+   * Empty the cart's items but KEEP the rest of the draft — table, hall,
+   * guest count and comments stay. Used by "Очистить корзину": only the
+   * dish positions are removed, the chosen number of guests remains.
+   */
+  clearDraftItems: () => {
+    const d = get().draft
+    if (!d) return
+    get()._setDraft({ ...d, items: [] })
+  },
+
   setDraftTable: (tableId, hallId) => {
     let d = get().draft
-    if (!d) d = { tableId: null, hallId: null, items: [], comments: '' }
+    if (!d) d = { tableId: null, hallId: null, items: [], comments: '', guestCount: 1 }
     get()._setDraft({ ...d, tableId, hallId })
   },
 
   setDraftComments: (comments) => {
     let d = get().draft
-    if (!d) d = { tableId: null, hallId: null, items: [], comments: '' }
+    if (!d) d = { tableId: null, hallId: null, items: [], comments: '', guestCount: 1 }
     get()._setDraft({ ...d, comments })
+  },
+
+  // === actions: guests (split a draft across 1..10 guests; 1 = single bill) ===
+
+  /** Set guest count (clamped 1..10). Used by the initial "how many guests" pick. */
+  setGuestCount: (n) => {
+    let d = get().draft
+    if (!d) d = { tableId: null, hallId: null, items: [], comments: '', guestCount: 1 }
+    const count = Math.max(1, Math.min(10, n | 0))
+    get()._setDraft({ ...d, guestCount: count })
+  },
+
+  /** Add one guest (up to 10). */
+  addGuest: () => {
+    const d = get().draft
+    if (!d) return
+    if ((d.guestCount || 1) >= 10) return
+    get()._setDraft({ ...d, guestCount: (d.guestCount || 1) + 1 })
+  },
+
+  /**
+   * Remove guest `g`: drop that guest's items and renumber the rest so the
+   * sequence stays 1..N (guest 3 becomes 2, etc.). Min count is 1.
+   */
+  removeGuest: (g) => {
+    const d = get().draft
+    if (!d) return
+    const count = d.guestCount || 1
+    if (count <= 1) return
+    const items = d.items
+      .filter((i) => (i.guest || 1) !== g)
+      .map((i) => ((i.guest || 1) > g ? { ...i, guest: i.guest - 1 } : i))
+    get()._setDraft({ ...d, items, guestCount: count - 1 })
   },
 
   clearDraft: () => {

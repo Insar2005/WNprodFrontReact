@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useUiStore } from '@/stores/ui'
 
 /**
  * Bottom navigation bar with a sliding pill indicator.
@@ -46,13 +47,10 @@ function TableIcon() {
   )
 }
 
-function NoteIcon() {
+function ToolsIcon() {
   return (
     <svg {...iconProps} className="nav-icon">
-      <path d="M6 3h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
-      <path d="M14 3v4h4" />
-      <path d="M9 13h6" />
-      <path d="M9 17h4" />
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z" />
     </svg>
   )
 }
@@ -81,13 +79,25 @@ function ProfileIcon() {
 const items = [
   { to: '/home', Icon: HomeIcon, label: 'Главная' },
   { to: '/map', Icon: TableIcon, label: 'Карта' },
-  { to: '/notes', Icon: NoteIcon, label: 'Заметки' },
+  {
+    to: '/tools',
+    Icon: ToolsIcon,
+    label: 'Инструменты',
+    // Keep this tab highlighted on the tool sub-pages too.
+    match: ['/tools', '/notes', '/reminders', '/calculator'],
+  },
   { to: '/shifts', Icon: ShiftIcon, label: 'Смены' },
   { to: '/profile', Icon: ProfileIcon, label: 'Профиль' },
 ]
 
 export default function BottomNavigation() {
   const { pathname } = useLocation()
+
+  // While a full-screen sheet/overlay is open (e.g. the order details sheet),
+  // hide the nav: its backdrop-filter would otherwise paint over the sheet's
+  // lower buttons ("Перенести"/"Удалить"), and it's non-interactive anyway
+  // behind the sheet's backdrop.
+  const overlayOpen = useUiStore((s) => s.overlayCount > 0)
 
   // Some old WebViews don't support backdrop-filter → fall back to an
   // opaque background. CSS.supports is synchronous, so compute it lazily
@@ -105,18 +115,21 @@ export default function BottomNavigation() {
   // Sub-routes (e.g. /order-builder) have hideBottomNav so the bar isn't
   // shown there anyway, but this keeps the indicator sensible otherwise.
   const activeIdx = useMemo(() => {
+    // A tab may claim several paths (e.g. Инструменты owns its sub-pages).
+    const pathsFor = (it) => it.match ?? [it.to]
     // Exact match first.
     for (let i = 0; i < items.length; i++) {
-      if (items[i].to === pathname) return i
+      if (pathsFor(items[i]).some((p) => p === pathname)) return i
     }
     // Longest prefix match.
     let bestIdx = -1
     let bestLen = 0
     for (let i = 0; i < items.length; i++) {
-      const to = items[i].to
-      if (pathname.startsWith(to) && to.length > bestLen) {
-        bestIdx = i
-        bestLen = to.length
+      for (const p of pathsFor(items[i])) {
+        if (pathname.startsWith(p) && p.length > bestLen) {
+          bestIdx = i
+          bestLen = p.length
+        }
       }
     }
     return bestIdx
@@ -130,6 +143,8 @@ export default function BottomNavigation() {
     activeIdx >= 0
       ? activeIdx * tabWidthPct + tabWidthPct / 2 - tabWidthPct / 4
       : 0
+
+  if (overlayOpen) return null
 
   return (
     <nav className={noBlur ? 'bottom-nav bottom-nav--no-blur' : 'bottom-nav'}>

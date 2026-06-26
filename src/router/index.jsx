@@ -58,6 +58,25 @@ const router = createBrowserRouter([
           Component: (await import('@/views/notes/Notes')).default,
         }),
       },
+      // ── Инструменты: landing + sub-tools. ──
+      {
+        path: 'tools',
+        lazy: async () => ({
+          Component: (await import('@/views/tools/ToolsView')).default,
+        }),
+      },
+      {
+        path: 'reminders',
+        lazy: async () => ({
+          Component: (await import('@/views/tools/RemindersView')).default,
+        }),
+      },
+      {
+        path: 'calculator',
+        lazy: async () => ({
+          Component: (await import('@/views/tools/CalculatorView')).default,
+        }),
+      },
       {
         path: 'menu',
         lazy: async () => ({

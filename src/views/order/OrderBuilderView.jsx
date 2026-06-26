@@ -13,6 +13,8 @@ import MenuTwoPanel from '@/views/menu/MenuTwoPanel'
 import MenuPickRow from './MenuPickRow'
 import CartContent from './CartContent'
 import TablePickerSheet from './TablePickerSheet'
+import { GuestCountDialog, GuestBar } from './OrderGuests'
+import '@/styles/order-builder.css'
 
 function pluralize(n, forms) {
   const a = Math.abs(n) % 100
@@ -43,6 +45,7 @@ export default function OrderBuilderView() {
   const [searchParams] = useSearchParams()
 
   const draft = useOrderStore((s) => s.draft)
+  const orders = useOrderStore((s) => s.orders)
   const menuItems = useMenuStore((s) => s.items)
   const menuCategories = useMenuStore((s) => s.categories)
   const selectedCategoryId = useMenuStore((s) => s.selectedCategoryId)
@@ -53,6 +56,8 @@ export default function OrderBuilderView() {
   const [submitting, setSubmitting] = useState(false)
   const [tablePickerVisible, setTablePickerVisible] = useState(false)
   const [contextTableNum, setContextTableNum] = useState(null)
+  const [selectedGuest, setSelectedGuest] = useState(1)
+  const [guestDialogOpen, setGuestDialogOpen] = useState(false)
   const cartSheetRef = useRef(null)
 
   const snapPoints = useMemo(() => [180, 0.55, 0.92], [])
@@ -91,10 +96,33 @@ export default function OrderBuilderView() {
     () => draftItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
     [draftItems],
   )
+  const guestCount = draft?.guestCount || 1
+  // Clamp selection into range (e.g. after a guest is removed) without an effect.
+  const activeGuest = Math.min(selectedGuest, guestCount) || 1
+
+  // When adding to an existing order — its current items, shown as read-only
+  // context in the cart so it's clear who already has what.
+  const contextItems = useMemo(() => {
+    if (!addingToOrderId) return []
+    return orders.find((o) => o.id === addingToOrderId)?.items || []
+  }, [addingToOrderId, orders])
+
+  // Quantity of a menu item for the CURRENTLY selected guest (drives the
+  // badge/qty on menu cards, so building each guest's order is independent).
   const qtyOf = (menuItemId) =>
     draftItems
-      .filter((i) => i.menu_item_id === menuItemId)
+      .filter((i) => i.menu_item_id === menuItemId && (i.guest || 1) === activeGuest)
       .reduce((sum, i) => sum + i.quantity, 0)
+
+  // Item quantity per guest, for the small badge on each guest tab.
+  const guestCounts = useMemo(() => {
+    const m = {}
+    for (const i of draftItems) {
+      const g = i.guest || 1
+      m[g] = (m[g] || 0) + i.quantity
+    }
+    return m
+  }, [draftItems])
 
   const hallTables = useHallStore((s) => s.tables)
   const hallList = useHallStore((s) => s.halls)
@@ -146,23 +174,35 @@ export default function OrderBuilderView() {
         return
       }
       setContextTableNum(o.table_number || null)
-      order.replaceDraftEphemeral({ tableId: o.table_id || null, hallId: o.hall_id || null })
+      order.replaceDraftEphemeral({
+        tableId: o.table_id || null,
+        hallId: o.hall_id || null,
+        guestsCount: o.guests_count || 1,
+      })
       return
     }
 
+    // Starting/continuing a NEW order. The guest dialog must appear whenever
+    // you begin a fresh order (tap any free table or "Взять заказ"). We only
+    // resume an existing draft when it's the SAME table (or a non-empty
+    // table-less cart) — otherwise a leftover guest count from another table
+    // would carry over.
     const queryTableId = searchParams.get('table_id')
-    if (!order.draft) {
-      if (queryTableId) {
-        const t = hall.tableById(queryTableId)
-        order.startDraft({ tableId: t?.id || null, hallId: t?.hall_id || null })
-      } else {
-        order.startDraft()
-      }
-    } else if (queryTableId) {
+    const d = order.draft
+    const draftHasItems = !!d && d.items.length > 0
+    if (queryTableId) {
       const t = hall.tableById(queryTableId)
-      if (t && t.id !== order.draft.tableId) {
-        order.setDraftTable(t.id, t.hall_id)
+      const tid = t?.id || null
+      if (!d || d.tableId !== tid) {
+        order.startDraft({ tableId: tid, hallId: t?.hall_id || null })
+        setGuestDialogOpen(true)
       }
+      // same table → resume current draft (keep items + guests)
+    } else if (!d || !draftHasItems) {
+      // Table-less "Взять заказ": start fresh + ask, unless resuming a
+      // non-empty table-less cart.
+      order.startDraft()
+      setGuestDialogOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -179,8 +219,30 @@ export default function OrderBuilderView() {
 
   // === Actions ===
   const onAddToCart = (item) => {
-    useOrderStore.getState().addToDraft(item)
+    useOrderStore.getState().addToDraft(item, { guest: activeGuest })
     hapticImpact('light')
+  }
+
+  const onAddGuest = () => {
+    useOrderStore.getState().addGuest()
+    setSelectedGuest((useOrderStore.getState().draft?.guestCount) || 1)
+  }
+
+  const onRemoveGuest = async (g) => {
+    const order = useOrderStore.getState()
+    const hasItems = (order.draft?.items || []).some((i) => (i.guest || 1) === g)
+    const ok = await useUiStore.getState().confirm({
+      title: `Удалить гостя ${g}?`,
+      message: hasItems
+        ? 'Позиции этого гостя будут удалены из заказа.'
+        : 'Гость будет удалён, остальные перенумеруются.',
+      confirmText: 'Удалить',
+      cancelText: 'Отмена',
+      danger: true,
+    })
+    if (!ok) return
+    order.removeGuest(g)
+    setSelectedGuest((s) => Math.min(s, order.draft?.guestCount || 1) || 1)
   }
 
   const onSubmit = async () => {
@@ -196,6 +258,7 @@ export default function OrderBuilderView() {
           price: i.price,
           quantity: i.quantity,
           comment: i.comment || null,
+          guest: i.guest || 1,
         }))
         const updated = await order.addItemsToOrder(addingToOrderId, items)
         order.clearDraft()
@@ -219,7 +282,9 @@ export default function OrderBuilderView() {
             price: i.price,
             quantity: i.quantity,
             comment: i.comment || null,
+            guest: i.guest || 1,
           })),
+          guests_count: order.draft?.guestCount || 1,
           comments: order.draft?.comments || null,
         }
         await order.editPaidOrder(editingPaidId, patch)
@@ -272,15 +337,17 @@ export default function OrderBuilderView() {
       danger: true,
     })
     if (!ok) return
+    // Only the dish positions are removed — table, hall and the chosen
+    // number of guests stay (in add-to-order mode keep the order's guests).
     if (addingToOrderId) {
       const o = order.orderById(addingToOrderId)
       order.replaceDraftEphemeral({
         tableId: o?.table_id || null,
         hallId: o?.hall_id || null,
+        guestsCount: o?.guests_count || order.draft?.guestCount || 1,
       })
     } else {
-      order.clearDraft()
-      order.startDraft()
+      order.clearDraftItems()
     }
   }
 
@@ -432,7 +499,17 @@ export default function OrderBuilderView() {
           items={activeItems}
           onSelect={(id) => useMenuStore.getState().selectCategory(id)}
           emptyText="В этой категории пока нет позиций"
-          itemSlot={(item) => (
+          headerSlot={
+            <GuestBar
+              guestCount={guestCount}
+              selected={activeGuest}
+              counts={guestCounts}
+              onSelect={setSelectedGuest}
+              onAdd={onAddGuest}
+              onRemove={onRemoveGuest}
+            />
+          }
+          renderItem={(item) => (
             <MenuPickRow
               key={item.id}
               item={item}
@@ -456,7 +533,9 @@ export default function OrderBuilderView() {
       >
         <CartContent
           items={draftItems}
+          contextItems={contextItems}
           currency={currency}
+          guestCount={guestCount}
           onInc={(id) => useOrderStore.getState().incDraftItem(id)}
           onDec={(id) => useOrderStore.getState().decDraftItem(id)}
           onUpdateComment={(id, comment) =>
@@ -492,6 +571,21 @@ export default function OrderBuilderView() {
         onClose={() => setTablePickerVisible(false)}
         onSelect={onTableSelect}
       />
+
+      {guestDialogOpen && (
+        <GuestCountDialog
+          onPick={(n) => {
+            useOrderStore.getState().setGuestCount(n)
+            setSelectedGuest(1)
+            setGuestDialogOpen(false)
+          }}
+          onCancel={() => {
+            setGuestDialogOpen(false)
+            useOrderStore.getState().clearDraft()
+            goBack()
+          }}
+        />
+      )}
     </div>
   )
 }

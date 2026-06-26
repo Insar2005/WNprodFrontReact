@@ -1,0 +1,433 @@
+/* ==========================================================================
+   Reminders (Инструменты → Напоминания)
+   Imported by src/views/tools/RemindersView.jsx.
+   ========================================================================== */
+
+.rm-seg {
+  margin-bottom: 18px;
+}
+
+.rm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rm-group-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wn-ink-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px 4px;
+}
+.rm-group-title--danger {
+  color: var(--wn-rose-ink, #c62828);
+}
+
+.rm-card {
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 16px;
+  padding: 4px 14px;
+}
+
+.rm-divider {
+  height: 1px;
+  background: var(--wn-glass-border-subtle);
+}
+
+.rm-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.rm-check {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--wn-ink-faint);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.rm-check--on {
+  background: var(--wn-accent);
+  border-color: var(--wn-accent);
+}
+
+.rm-item-body {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rm-item-text {
+  font-size: 16px;
+  color: var(--wn-ink);
+  line-height: 1.25;
+}
+.rm-item--done .rm-item-text {
+  text-decoration: line-through;
+  color: var(--wn-ink-mute);
+}
+
+.rm-item-time {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+}
+.rm-lead {
+  color: var(--wn-ink-faint);
+}
+
+/* ── Calendar ── */
+.rm-cal-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.rm-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.rm-cal-month {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--wn-ink);
+}
+.rm-cal-nav {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.rm-cal-weekdays {
+  margin-bottom: 6px;
+}
+.rm-cal-wd {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wn-ink-faint);
+  padding: 2px 0;
+}
+.rm-cal-day {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink);
+  border-radius: 12px;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rm-cal-day--today {
+  border-color: var(--wn-accent);
+  color: var(--wn-accent-ink);
+  font-weight: 700;
+}
+.rm-cal-day--sel {
+  background: var(--wn-accent);
+  border-color: var(--wn-accent);
+  color: #fff;
+  font-weight: 700;
+}
+.rm-cal-dot {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wn-peach-ink);
+}
+.rm-cal-day--sel .rm-cal-dot {
+  background: #fff;
+}
+.rm-cal-wrap .rm-group-title {
+  margin-top: 20px;
+}
+
+.rm-empty {
+  color: var(--wn-ink-faint);
+  font-size: 14px;
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* ── Day agenda (reminders by time) ── */
+.rm-agenda {
+  display: flex;
+  flex-direction: column;
+}
+.rm-slot {
+  display: grid;
+  grid-template-columns: 52px 8px 1fr;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 56px;
+}
+.rm-slot-time {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wn-ink-soft);
+  padding-top: 16px;
+  text-align: right;
+}
+.rm-slot-line {
+  position: relative;
+  width: 3px;
+  justify-self: center;
+  border-radius: 2px;
+  margin: 6px 0;
+  background: var(--wn-accent);
+}
+.rm-slot-line::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: inherit;
+  border: 2px solid var(--wn-bg-elevated);
+}
+.rm-slot-card {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.rm-slot-card--done .rm-item-text {
+  text-decoration: line-through;
+  color: var(--wn-ink-mute);
+}
+
+/* ── New/edit reminder modal ── */
+.rm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.rm-modal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--wn-bg-elevated);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.rm-modal-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  margin: 0;
+}
+.rm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+.rm-field-row {
+  display: flex;
+  gap: 12px;
+}
+.rm-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wn-ink-mute);
+}
+.rm-input {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+  color: var(--wn-ink);
+  width: 100%;
+  box-sizing: border-box;
+}
+.rm-lead-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rm-chip {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg);
+  color: var(--wn-ink-soft);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rm-chip--on {
+  background: var(--wn-accent-bg);
+  color: var(--wn-accent-ink);
+  border-color: var(--wn-accent);
+}
+.rm-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.rm-btn {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rm-btn--ghost {
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink);
+}
+.rm-btn--primary {
+  background: var(--wn-accent);
+  color: #fff;
+}
+.rm-btn--danger {
+  background: var(--wn-rose-bg, #fde8e8);
+  color: var(--wn-rose-ink, #c62828);
+}
+
+/* 24-hour time selectors (hours : minutes) */
+.rm-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rm-select {
+  width: auto;
+  flex: 1;
+  text-align: center;
+  text-align-last: center;
+}
+.rm-time-colon {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--wn-ink);
+}
+
+/* Vertical gray separator between the check circle and the task text */
+.rm-item-sep {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  background: var(--wn-ink-faint);
+  opacity: 0.55;
+}
+
+/* ── Toggle + "fly down to Выполнено" animations ── */
+.rm-check {
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.rm-check:hover {
+  transform: scale(1.15);
+}
+.rm-check:active {
+  transform: scale(0.9);
+}
+.rm-check--on {
+  animation: rmCheckPop 0.3s ease;
+}
+@keyframes rmCheckPop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+.rm-item.rm-leaving {
+  animation: rmFlyDown 0.28s ease forwards;
+}
+.rm-item.rm-entering {
+  animation: rmFadeInDown 0.4s ease;
+}
+@keyframes rmFlyDown {
+  from { transform: translateY(0) scale(1); opacity: 1; }
+  to { transform: translateY(26px) scale(0.96); opacity: 0; }
+}
+@keyframes rmFadeInDown {
+  from { transform: translateY(-12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* "Удалить" action shown on completed reminders */
+.rm-delete {
+  flex: 0 0 auto;
+  align-self: center;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--wn-rose-ink, #c62828);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+.rm-delete:active {
+  opacity: 0.6;
+}

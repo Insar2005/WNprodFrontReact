@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { newId } from '@/utils/nanoid'
 import { TIMEZONES, formatTimezoneOption } from '@/utils/timezones'
+import '@/styles/onboarding.css'
 
 /**
  * 3-step onboarding: welcome → features → create first workplace.
@@ -40,13 +41,25 @@ export default function OnboardingView() {
   const [title, setTitle] = useState('')
   const [currency, setCurrency] = useState('RUB')
   const [timezone, setTimezone] = useState(() => detectTimezone())
+  const [shiftType, setShiftType] = useState('') // '' | 'fixed' | 'percent'
+  const [pay, setPay] = useState('')
+  const [percent, setPercent] = useState('')
 
   const next = () => setStep((s) => Math.min(2, s + 1))
   const prev = () => setStep((s) => Math.max(0, s - 1))
 
+  // All workplace fields are required before finishing.
+  const amountOk =
+    shiftType === 'fixed'
+      ? Number(pay) > 0
+      : shiftType === 'percent'
+        ? Number(percent) > 0
+        : false
+  const canFinish = !!title.trim() && amountOk
+
   const finish = async () => {
+    if (busy || !canFinish) return
     const trimmed = title.trim()
-    if (busy || !trimmed) return
     setBusy(true)
     try {
       await useWorkplaceStore.getState().create({
@@ -54,11 +67,9 @@ export default function OnboardingView() {
         title: trimmed,
         currency,
         timezone,
-        // Backend's WorkplaceCreate requires pay/shift fields; onboarding
-        // keeps the form minimal, so send sensible defaults — tuned later.
-        service_percent_default: 0,
-        shift_type_default: 'fixed',
-        pay_for_shift_default: 0,
+        shift_type_default: shiftType,
+        service_percent_default: shiftType === 'percent' ? Number(percent) : 0,
+        pay_for_shift_default: shiftType === 'fixed' ? Number(pay) : 0,
       })
       await useAuthStore.getState().completeOnboarding()
       navigate('/home', { replace: true })
@@ -81,16 +92,32 @@ export default function OnboardingView() {
       </div>
 
       {step === 0 && (
-        <section className="ob-step">
-          <div className="hero">
-            <div className="hero-icon">📝</div>
-            <h1 className="hero-title">Waiter Note</h1>
-            <p className="hero-subtitle">Ваш блокнот официанта</p>
+        <section className="ob-step ob-welcome">
+          <div className="ob-hero">
+            <div className="ob-badge" aria-hidden="true">
+              <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 3h7l4 4v12a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V4.5A1.5 1.5 0 0 1 7 3Z" />
+                <path d="M14 3v4h4" />
+                <path d="M9 13.5l2 2 4-4.5" />
+              </svg>
+            </div>
+            <h1 className="ob-hero-title">Waiter Note</h1>
+            <p className="ob-hero-sub">Помощник официанта прямо в Telegram</p>
           </div>
-          <p className="step-text">
-            Заказы по столам, учёт смен и чаевых, карта зала — всё в одном
-            месте, прямо в Telegram.
+
+          <p className="ob-lead">
+            Заказы, столы, смены и чаевые — всё в одном месте. Никаких
+            забытых заказов и подсчётов в уме: приложение ведёт смену вместе
+            с вами.
           </p>
+
+          <ul className="ob-pills">
+            <li>📋 Заказы</li>
+            <li>⏱ Смены</li>
+            <li>🪑 Зал</li>
+            <li>🛠 Инструменты</li>
+          </ul>
+
           <div className="step-actions">
             <button className="ob-btn ob-btn--primary" onClick={next}>
               Начать
@@ -131,11 +158,11 @@ export default function OnboardingView() {
               </div>
             </li>
             <li className="feature">
-              <span className="feature-icon">📝</span>
+              <span className="feature-icon">🛠</span>
               <div className="feature-body">
-                <div className="feature-name">Заметки</div>
+                <div className="feature-name">Инструменты</div>
                 <div className="feature-desc">
-                  Заметки по смене, заведению или общие
+                  Всё, что нужно на смене: заметки, напоминания, калькулятор и др.
                 </div>
               </div>
             </li>
@@ -202,6 +229,67 @@ export default function OnboardingView() {
                 ))}
               </select>
             </label>
+
+            <fieldset className="fm-fieldset">
+              <legend className="fm-legend">Оплата за смену</legend>
+              <div className="fm-radio-row">
+                <label className="fm-radio">
+                  <input
+                    type="radio"
+                    name="ob_shift_type"
+                    value="fixed"
+                    checked={shiftType === 'fixed'}
+                    onChange={() => setShiftType('fixed')}
+                  />
+                  <span>Ставка</span>
+                </label>
+                <label className="fm-radio">
+                  <input
+                    type="radio"
+                    name="ob_shift_type"
+                    value="percent"
+                    checked={shiftType === 'percent'}
+                    onChange={() => setShiftType('percent')}
+                  />
+                  <span>Процент с продаж</span>
+                </label>
+              </div>
+            </fieldset>
+
+            {shiftType === 'fixed' && (
+              <label className="field">
+                <span className="field-label">Ставка за смену ({currency})</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  min="0"
+                  step="100"
+                  inputMode="numeric"
+                  placeholder="Например: 2000"
+                  value={pay}
+                  onChange={(e) => setPay(e.target.value)}
+                />
+              </label>
+            )}
+            {shiftType === 'percent' && (
+              <label className="field">
+                <span className="field-label">Процент с продаж (0–100)</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  inputMode="numeric"
+                  placeholder="Например: 5"
+                  value={percent}
+                  onChange={(e) => setPercent(e.target.value)}
+                />
+              </label>
+            )}
+            {!shiftType && (
+              <p className="ob-hint">Выберите тип оплаты, чтобы продолжить.</p>
+            )}
           </div>
 
           <div className="step-actions">
@@ -210,7 +298,7 @@ export default function OnboardingView() {
             </button>
             <button
               className="ob-btn ob-btn--primary"
-              disabled={busy || !title.trim()}
+              disabled={busy || !canFinish}
               onClick={finish}
             >
               {busy ? 'Создаём…' : 'Создать и начать'}

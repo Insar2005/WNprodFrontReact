@@ -1,6 +1,7 @@
 import { useLocation, useNavigate, useMatches } from 'react-router-dom'
 import { useShiftStore } from '@/stores/shift'
 import { useWorkplaceStore } from '@/stores/workplace'
+import { useUiStore } from '@/stores/ui'
 
 /**
  * Floating primary CTA: "Взять заказ" (shift open) or "Открыть смену".
@@ -16,8 +17,10 @@ import { useWorkplaceStore } from '@/stores/workplace'
  * ─────────────────────────────────────────────────────────────────────
  */
 
-// Top-level screens where the action makes no sense.
-const HIDE_ON_PATHS = new Set(['/profile', '/shifts'])
+// The floating CTA only makes sense on Главная and Карта — everywhere
+// else (Инструменты sub-pages, Профиль, Смены) it would just overlap the
+// content, so we show it ONLY on these paths.
+const SHOW_ON_PATHS = new Set(['/home', '/map'])
 
 export default function PrimaryAction() {
   const location = useLocation()
@@ -30,8 +33,17 @@ export default function PrimaryAction() {
 
   const hideBottomNav = matches.some((m) => m.handle?.hideBottomNav === true)
 
+  // Hide while a sheet/overlay or confirm/prompt dialog is open, so the CTA
+  // never overlaps (or gets tapped through) the order details sheet buttons.
+  const overlayOpen = useUiStore(
+    (s) => s.overlayCount > 0 || !!s.confirmDialog || !!s.promptDialog,
+  )
+
   const visible =
-    !hideBottomNav && !HIDE_ON_PATHS.has(location.pathname) && !!currentId
+    !hideBottomNav &&
+    SHOW_ON_PATHS.has(location.pathname) &&
+    !!currentId &&
+    !overlayOpen
 
   if (!visible) return null
 

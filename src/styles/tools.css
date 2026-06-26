@@ -1,0 +1,73 @@
+/* Tools landing — each tool is its own larger, separate card. */
+
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tool-card {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 18px;
+  padding: 20px 18px;
+  box-shadow: var(--wn-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+}
+.tool-card:active {
+  transform: scale(0.985);
+}
+
+.tool-card-icon {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wn-ink);
+}
+.tool-card-icon--sky {
+  background: var(--wn-sky-bg);
+  color: var(--wn-sky-ink);
+}
+.tool-card-icon--peach {
+  background: var(--wn-peach-bg);
+  color: var(--wn-peach-ink);
+}
+.tool-card-icon--lavender {
+  background: var(--wn-lavender-bg);
+  color: var(--wn-lavender-ink);
+}
+
+.tool-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tool-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--wn-ink);
+}
+.tool-card-meta {
+  font-size: 14px;
+  color: var(--wn-ink-mute);
+}
+
+.tool-card-chev {
+  flex: 0 0 auto;
+  color: var(--wn-ink-faint);
+  display: inline-flex;
+}

@@ -965,7 +965,7 @@ function ensureEditable(o) {
   if (o.is_paid) throw conflict('Нельзя изменить оплаченный заказ')
 }
 
-function buildOrder({ orderId, shift, tableId, items, comments }) {
+function buildOrder({ orderId, shift, tableId, items, comments, guestsCount }) {
   if (shift.is_closed) throw conflict('Нельзя создать заказ в закрытой смене')
   if (find(db.orders, orderId)) throw conflict('Order id already exists')
 
@@ -991,6 +991,7 @@ function buildOrder({ orderId, shift, tableId, items, comments }) {
     shift_id: shift.id,
     ...tableSnap,
     comments: comments ?? null,
+    guests_count: guestsCount ?? 1,
     created_at: now,
     updated_at: now,
     closed_at: null,
@@ -1011,6 +1012,7 @@ function buildOrder({ orderId, shift, tableId, items, comments }) {
       quantity: raw.quantity,
       total_price: round2(raw.price * raw.quantity),
       comment: raw.comment ?? null,
+      guest: raw.guest ?? 1,
       served: false,
     })
   }
@@ -1035,6 +1037,7 @@ export async function createOrderInShift(shiftId, body) {
       tableId: body.table_id,
       items: body.items || [],
       comments: body.comments,
+      guestsCount: body.guests_count,
     }),
   )
   return orderWithItems(order)
@@ -1055,6 +1058,7 @@ export async function createOrderInCurrentShift(workplaceId, body) {
       tableId: body.table_id,
       items: body.items || [],
       comments: body.comments,
+      guestsCount: body.guests_count,
     }),
   )
   return orderWithItems(order)
@@ -1138,6 +1142,7 @@ export async function addOrderItems(orderId, items) {
         quantity: raw.quantity,
         total_price: round2(raw.price * raw.quantity),
         comment: raw.comment ?? null,
+        guest: raw.guest ?? 1,
         served: false,
       })
     }
@@ -1286,10 +1291,14 @@ export async function editPaidOrder(orderId, patch) {
           quantity: qty,
           total_price: round2(price * qty),
           comment: raw.comment ?? null,
+          guest: raw.guest ?? 1,
           served: false,
         })
       }
       recomputeOrderTotal(o.id)
+    }
+    if (patch.guests_count !== undefined) {
+      o.guests_count = Math.max(1, Math.min(10, Number(patch.guests_count) || 1))
     }
     if (patch.tips !== undefined) o.tips = Number(patch.tips) || 0
     if (patch.comments !== undefined) o.comments = patch.comments

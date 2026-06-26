@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrderStore } from '@/stores/order'
 import { useWorkplaceStore } from '@/stores/workplace'
@@ -6,6 +6,8 @@ import { useUiStore } from '@/stores/ui'
 import { formatMoney, formatDuration } from '@/utils/format'
 import { hapticImpact } from '@/utils/telegram'
 import { useLiveDuration } from '@/hooks/useLiveDuration'
+import TablePickerSheet from './TablePickerSheet'
+import '@/styles/order-guests.css'
 
 /**
  * Order details sheet — two modes: active (pay/add/move/delete) and paid
@@ -19,11 +21,10 @@ import { useLiveDuration } from '@/hooks/useLiveDuration'
  * - useLiveDuration composable → hook.
  * - $emit('close'|'reopen'|'edit') → onClose / onReopen / onEdit.
  *
- * ── Deferred ────────────────────────────────────────────────────────
- * "Перенести на другой стол" opens TablePickerSheet, which isn't ported
- * yet (it lands with the Map/Hall work). The button is present but routes
- * the user to the map for now. Paid mode (history) never shows move, so
- * OrderHistoryView is fully functional regardless.
+ * ── Move ────────────────────────────────────────────────────────────
+ * "Перенести на другой стол" opens TablePickerSheet inline (state
+ * movePickerVisible); picking a table calls moveOrder, picking "Без стола"
+ * detaches. Paid mode (history) never shows move.
  * ─────────────────────────────────────────────────────────────────────
  */
 export default function OrderDetailsSheet({
@@ -39,10 +40,25 @@ export default function OrderDetailsSheet({
   const workplaceCurrency = useWorkplaceStore((s) => s.current()?.currency ?? 'RUB')
 
   const [busy, setBusy] = useState(false)
-  const [tipsAmount, setTipsAmount] = useState('')
+  const [movePickerVisible, setMovePickerVisible] = useState(false)
+  // Prefill from the order's saved tips in paid mode so history can quickly
+  // correct a forgotten tip. The sheet remounts per order (key={order.id}),
+  // so this initializer runs fresh for each opened order.
+  const [tipsAmount, setTipsAmount] = useState(() =>
+    paidMode && order?.tips ? String(order.tips) : '',
+  )
   // NOTE: tips reset on order change is handled by remounting via a
   // key={order.id} at the call site (OrderHistoryView / Map), so no
   // setState-in-effect is needed here.
+
+  // While the sheet is open, register a global overlay so the floating
+  // "Взять заказ" CTA hides — otherwise it overlaps "Оплатить"/"+ Позиции".
+  useEffect(() => {
+    if (!visible) return undefined
+    const ui = useUiStore.getState()
+    ui.pushOverlay()
+    return () => ui.popOverlay()
+  }, [visible])
 
   // Fresh order from the store (fallback to prop for paid/history orders
   // that may not be in the active orders list).
@@ -55,20 +71,22 @@ export default function OrderDetailsSheet({
   const currency = liveOrder?.currency || workplaceCurrency
   const orderItems = liveOrder?.items || []
   const canPay = orderItems.length > 0
+  const guestsCount = liveOrder?.guests_count || 1
 
   const tipsValue = useMemo(() => {
     const n = Number(tipsAmount)
     return Number.isFinite(n) && n > 0 ? n : 0
   }, [tipsAmount])
 
-  const totalToPay = (liveOrder?.total_price || 0) + tipsValue
-  const paidTips = paidMode
-    ? (() => {
-        const n = Number(liveOrder?.tips)
-        return Number.isFinite(n) && n > 0 ? n : 0
-      })()
-    : tipsValue
-  const finalTotal = (liveOrder?.total_price || 0) + paidTips
+  // Tips are recorded separately (waiter's earnings / shift tips) — they are
+  // NOT part of the order's cost, so "Сумма"/"К оплате"/"Итого" всегда равны
+  // стоимости позиций заказа. Чаевые показываем отдельной строкой. The input
+  // drives the displayed tips in both modes (in paid mode it's prefilled).
+  const orderTotal = liveOrder?.total_price || 0
+  const paidTips = tipsValue
+  // In history, allow saving an edited tip (e.g. a forgotten one).
+  const savedTips = Number(liveOrder?.tips) || 0
+  const tipsDirty = paidMode && tipsValue !== savedTips
 
   const seconds = useLiveDuration(() => liveOrder?.created_at)
   const openedAgo = formatDuration(seconds)
@@ -109,6 +127,20 @@ export default function OrderDetailsSheet({
     }
   }
 
+  // Quick-save tips on a closed order (history) without the full edit flow.
+  const onSaveTips = async () => {
+    if (!order || busy) return
+    setBusy(true)
+    try {
+      await useOrderStore.getState().editPaidOrder(order.id, { tips: tipsValue })
+      useUiStore.getState().toastSuccess('Чаевые сохранены')
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const onAddItems = () => {
     if (!order) return
     onClose?.()
@@ -118,12 +150,14 @@ export default function OrderDetailsSheet({
   const onPay = async () => {
     if (!order || busy) return
     const ui = useUiStore.getState()
-    const amountLabel = formatMoney(totalToPay, currency)
+    const amountLabel = formatMoney(orderTotal, currency)
     const tipsLine =
-      tipsValue > 0 ? ` (включая ${formatMoney(tipsValue, currency)} чаевых)` : ''
+      tipsValue > 0
+        ? ` Чаевые ${formatMoney(tipsValue, currency)} будут записаны отдельно.`
+        : ''
     const ok = await ui.confirm({
       title: 'Подтвердить оплату?',
-      message: `Сумма: ${amountLabel}${tipsLine}. После подтверждения заказ закроется и стол освободится.`,
+      message: `К оплате: ${amountLabel}.${tipsLine} После подтверждения заказ закроется и стол освободится.`,
       confirmText: 'Подтвердить',
     })
     if (!ok) return
@@ -140,11 +174,30 @@ export default function OrderDetailsSheet({
   }
 
   const onMove = () => {
-    // TablePickerSheet not ported yet — send the user to the map to move
-    // the order there. Restored to an in-sheet picker with the Map work.
     if (!order) return
-    onClose?.()
-    navigate(`/map?show_order=${encodeURIComponent(order.id)}`)
+    setMovePickerVisible(true)
+  }
+
+  // Pick a target table to move (or detach) the order.
+  const onPickMoveTable = async (tableId) => {
+    setMovePickerVisible(false)
+    if (!order) return
+    setBusy(true)
+    try {
+      const updated = await useOrderStore.getState().moveOrder(order.id, tableId)
+      useUiStore
+        .getState()
+        .toastSuccess(
+          tableId
+            ? `Перенесено · стол №${updated.table_number}`
+            : 'Заказ откреплён от стола',
+        )
+      onClose?.()
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const onDelete = async () => {
@@ -173,7 +226,53 @@ export default function OrderDetailsSheet({
     if (e.target === e.currentTarget) onClose?.()
   }
 
+  // Single order line (shared by flat list and per-guest groups).
+  const renderOrderItem = (i) => (
+    <li key={i.id} className={i.served ? 'ods-item ods-item--served' : 'ods-item'}>
+      <button
+        className={i.served ? 'ods-served ods-served--on' : 'ods-served'}
+        aria-label={i.served ? 'Не подано' : 'Подано'}
+        onClick={() => onToggleServed(i)}
+      >
+        {i.served && (
+          <svg
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </button>
+      <div className="ods-item-main">
+        <div className="ods-item-title">
+          <span>{i.title}</span>
+          <span className="ods-item-qty">× {i.quantity}</span>
+        </div>
+        {i.comment && <div className="ods-item-comment">💬 {i.comment}</div>}
+      </div>
+      <div className="ods-item-price">{formatMoney(i.total_price, currency)}</div>
+      {!paidMode && (
+        <button
+          className="ods-item-remove"
+          disabled={busy}
+          aria-label="Удалить позицию"
+          onClick={() => onRemoveItem(i)}
+        >
+          ×
+        </button>
+      )}
+    </li>
+  )
+
   return (
+    <>
     <div className="sheet-overlay" onClick={onOverlayClick}>
       <div className="sheet ods-sheet" role="dialog" aria-modal="true">
         <header className="sheet-header">
@@ -205,60 +304,29 @@ export default function OrderDetailsSheet({
           )}
 
           {orderItems.length > 0 ? (
-            <ul className="ods-items">
-              {orderItems.map((i) => (
-                <li
-                  key={i.id}
-                  className={i.served ? 'ods-item ods-item--served' : 'ods-item'}
-                >
-                  <button
-                    className={
-                      i.served ? 'ods-served ods-served--on' : 'ods-served'
-                    }
-                    aria-label={i.served ? 'Не подано' : 'Подано'}
-                    onClick={() => onToggleServed(i)}
-                  >
-                    {i.served && (
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="14"
-                        height="14"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="ods-item-main">
-                    <div className="ods-item-title">
-                      <span>{i.title}</span>
-                      <span className="ods-item-qty">× {i.quantity}</span>
+            guestsCount <= 1 ? (
+              <ul className="ods-items">{orderItems.map(renderOrderItem)}</ul>
+            ) : (
+              Array.from({ length: guestsCount }, (_, gi) => gi + 1).map((g) => {
+                const guestItems = orderItems.filter((it) => (it.guest || 1) === g)
+                if (guestItems.length === 0) return null
+                const subtotal = guestItems.reduce((s, it) => s + (it.total_price || 0), 0)
+                return (
+                  <div className="cc-guest-group" key={g}>
+                    <div className="cc-guest-head">
+                      <span className="cc-guest-name">
+                        <span className="cc-guest-badge">{g}</span>
+                        Гость {g}
+                      </span>
+                      <span className="cc-guest-subtotal">
+                        {formatMoney(subtotal, currency)}
+                      </span>
                     </div>
-                    {i.comment && (
-                      <div className="ods-item-comment">💬 {i.comment}</div>
-                    )}
+                    <ul className="ods-items">{guestItems.map(renderOrderItem)}</ul>
                   </div>
-                  <div className="ods-item-price">
-                    {formatMoney(i.total_price, currency)}
-                  </div>
-                  {!paidMode && (
-                    <button
-                      className="ods-item-remove"
-                      disabled={busy}
-                      aria-label="Удалить позицию"
-                      onClick={() => onRemoveItem(i)}
-                    >
-                      ×
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
+                )
+              })
+            )
           ) : (
             liveOrder && (
               <div className="ods-empty-items">
@@ -267,7 +335,7 @@ export default function OrderDetailsSheet({
             )
           )}
 
-          {orderItems.length > 0 && !paidMode && (
+          {orderItems.length > 0 && (
             <div className="ods-tips-row">
               <label className="ods-tips-label">Чаевые</label>
               <div className="ods-tips-input-wrap">
@@ -282,29 +350,38 @@ export default function OrderDetailsSheet({
                 />
                 <span className="ods-tips-currency">{currency}</span>
               </div>
+              {tipsDirty && (
+                <button
+                  className="ods-tips-save"
+                  onClick={onSaveTips}
+                  disabled={busy}
+                >
+                  {busy ? '…' : 'Сохранить'}
+                </button>
+              )}
             </div>
           )}
 
           {orderItems.length > 0 && (
             <div className="ods-totals">
               <div className="ods-totals-row">
-                <span>Сумма</span>
+                <span>Заказ</span>
                 <span className="ods-totals-value">
-                  {formatMoney(liveOrder.total_price, currency)}
+                  {formatMoney(orderTotal, currency)}
                 </span>
               </div>
               {paidTips > 0 && (
                 <div className="ods-totals-row ods-totals-row--small">
-                  <span>Чаевые</span>
+                  <span>Чаевые (отдельно)</span>
                   <span className="ods-totals-value">
                     {formatMoney(paidTips, currency)}
                   </span>
                 </div>
               )}
               <div className="ods-totals-row ods-totals-row--main">
-                <span>{paidMode ? 'Итого' : 'К оплате'}</span>
+                <span>{paidMode ? 'Итого по заказу' : 'К оплате'}</span>
                 <span className="ods-totals-value">
-                  {formatMoney(finalTotal, currency)}
+                  {formatMoney(orderTotal, currency)}
                 </span>
               </div>
             </div>
@@ -358,5 +435,14 @@ export default function OrderDetailsSheet({
         )}
       </div>
     </div>
+
+    <TablePickerSheet
+      visible={movePickerVisible}
+      currentTableId={order?.table_id || null}
+      freeOnly={true}
+      onClose={() => setMovePickerVisible(false)}
+      onSelect={onPickMoveTable}
+    />
+    </>
   )
 }

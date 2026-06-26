@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useNotesStore } from '@/stores/notes'
 import { useWorkplaceStore } from '@/stores/workplace'
 import { useShiftStore } from '@/stores/shift'
@@ -20,6 +21,7 @@ const sortNotes = (arr) =>
   })
 
 export default function Notes() {
+  const navigate = useNavigate()
   const items = useNotesStore((s) => s.items)
   const isLoading = useNotesStore((s) => s.isLoading)
   const currentId = useWorkplaceStore((s) => s.currentId)
@@ -110,7 +112,29 @@ export default function Notes() {
     <div className="page notes-page">
       <header className="notes-header">
         <div className="notes-header-left">
-          <h1 className="notes-title">Заметки</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button
+              className="back-btn"
+              onClick={() => navigate('/tools')}
+              aria-label="Назад"
+              style={{ paddingLeft: 0 }}
+            >
+              <svg
+                width={24}
+                height={24}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
+            </button>
+            <h1 className="notes-title">Заметки</h1>
+          </div>
           {archived.length > 0 && (
             <label className="archive-toggle">
               <input
