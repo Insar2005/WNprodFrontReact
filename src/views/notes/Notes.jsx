@@ -6,6 +6,7 @@ import { useShiftStore } from '@/stores/shift'
 import WorkplaceSwitcher from '@/components/WorkplaceSwitcher'
 import NoteCard from './NoteCard'
 import NoteFormModal from './NoteFormModal'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 /**
  * Notes screen. (Was Notes.vue.)
@@ -22,6 +23,9 @@ const sortNotes = (arr) =>
 
 export default function Notes() {
   const navigate = useNavigate()
+  useTelegramBackButton(() => {
+    navigate('/tools')
+  })
   const items = useNotesStore((s) => s.items)
   const isLoading = useNotesStore((s) => s.isLoading)
   const currentId = useWorkplaceStore((s) => s.currentId)
@@ -113,7 +117,7 @@ export default function Notes() {
       <header className="notes-header">
         <div className="notes-header-left">
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button
+            {/* <button
               className="back-btn"
               onClick={() => navigate('/tools')}
               aria-label="Назад"
@@ -132,7 +136,7 @@ export default function Notes() {
               >
                 <path d="M15 6l-6 6 6 6" />
               </svg>
-            </button>
+            </button> */}
             <h1 className="notes-title">Заметки</h1>
           </div>
           {archived.length > 0 && (

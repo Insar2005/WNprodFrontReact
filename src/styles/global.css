@@ -3,7 +3,7 @@
    These CSS variables are the single source of truth for the visual style.
    Migrating components: replace hardcoded colors / shadows with var(--wn-...).
    ========================================================================== */
-
+@import './fullscreen-safe-area.css';
 :root {
   /* === Surfaces (glass) === */
   --wn-glass-light: rgba(255, 255, 255, 0.72);
@@ -219,7 +219,7 @@ input::placeholder, textarea::placeholder {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  padding-bottom: calc(76px + var(--wn-safe-bottom));
   -webkit-overflow-scrolling: touch;
 }
 
@@ -310,7 +310,7 @@ input::placeholder, textarea::placeholder {
 /* ----- Toasts ----- */
 .toast-stack {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 12px);
+  top: calc(var(--wn-safe-top) + 12px);
   left: 12px;
   right: 12px;
   z-index: 200;
@@ -702,7 +702,7 @@ input::placeholder, textarea::placeholder {
   left: 0;
   right: 0;
   height: 76px;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--wn-safe-bottom);
   z-index: 100;
 
   background: var(--wn-glass-light);
@@ -794,7 +794,7 @@ input::placeholder, textarea::placeholder {
 .primary-action {
   position: fixed;
   left: 50%;
-  bottom: calc(76px + 12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(76px + 12px + var(--wn-safe-bottom));
   transform: translateX(-50%);
 
   display: inline-flex;
@@ -937,7 +937,7 @@ input::placeholder, textarea::placeholder {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+  padding: 24px 20px calc(24px + var(--wn-safe-bottom));
   background-color: var(--wn-bg-elevated);
   box-sizing: border-box;
 }
@@ -2796,12 +2796,12 @@ input::placeholder, textarea::placeholder {
 .map-canvas-area {
   flex: 1;
   position: relative;
-  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  padding-bottom: calc(76px + var(--wn-safe-bottom));
 }
 .map-canvas-area > * {
   position: absolute;
   inset: 0;
-  bottom: calc(76px + env(safe-area-inset-bottom));
+  bottom: calc(76px + var(--wn-safe-bottom));
 }
 
 /* ==========================================================================

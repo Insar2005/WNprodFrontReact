@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useWorkplaceStore } from '@/stores/workplace'
 import ImportSharesSection from './ImportSharesSection'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 /**
  * Share screen — just a header + ImportSharesSection (or an empty hint
@@ -15,12 +16,14 @@ export default function ShareView() {
     else navigate('/profile')
   }
 
+  useTelegramBackButton(goBack)
+
   return (
     <div className="page">
       <header className="sub-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="sub-title">Поделиться</h1>
       </header>
 

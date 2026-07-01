@@ -7,6 +7,7 @@ import MenuItemRow from './MenuItemRow'
 import CategoryFormModal from './CategoryFormModal'
 import MenuItemFormModal from './MenuItemFormModal'
 import { matchesMenuQueryAcross } from '@/utils/menuSearch'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 /**
  * Menu editor with the two-panel layout (designer redesign, June 2026):
@@ -76,6 +77,7 @@ matchesMenuQueryAcross([i.title, i.description, i.portion], q),
     if (window.history.length > 1) navigate(-1)
     else navigate('/profile')
   }
+  useTelegramBackButton(goBack)
 
   const openCategoryCreate = () => {
     setEditingCategory(null)
@@ -105,9 +107,9 @@ matchesMenuQueryAcross([i.title, i.description, i.portion], q),
   return (
     <div className="page menu-page">
       <header className="menu-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="menu-title">Меню</h1>
         {currentTitle && <span className="menu-subtitle">{currentTitle}</span>}
         <button

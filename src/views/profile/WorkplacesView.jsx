@@ -4,6 +4,7 @@ import { useWorkplaceStore } from '@/stores/workplace'
 import { useUiStore } from '@/stores/ui'
 import { formatMoney } from '@/utils/format'
 import WorkplaceFormModal from '@/components/WorkplaceFormModal'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 function shiftTypeLabel(t) {
   return t === 'fixed' ? 'фикс' : 'процент'
@@ -40,6 +41,7 @@ export default function WorkplacesView() {
     if (window.history.length > 1) navigate(-1)
     else navigate('/profile')
   }
+  useTelegramBackButton(goBack)
 
   const selectWorkplace = async (id) => {
     if (id === currentId) return
@@ -75,9 +77,9 @@ export default function WorkplacesView() {
   return (
     <div className="page">
       <header className="sub-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="sub-title">Заведения</h1>
         <button className="btn-add" onClick={openCreateForm}>
           + Добавить

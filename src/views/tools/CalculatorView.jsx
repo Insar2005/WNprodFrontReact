@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import {  useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import '@/styles/calculator.css'
-
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 /**
  * Full-screen calculator: + − × ÷, decimals, delete one char, clear the
  * line. History (last 20, persisted) is hidden behind the clock button in
@@ -150,6 +150,9 @@ function IconClock(props) {
 
 export default function CalculatorView() {
   const navigate = useNavigate()
+  useTelegramBackButton(() => {
+    navigate('/tools')
+  })
   const [expr, setExpr] = useState('')
   const [justEvaluated, setJustEvaluated] = useState(false)
   const [history, setHistory] = useState(loadHistory)
@@ -228,9 +231,9 @@ export default function CalculatorView() {
   return (
     <div className="page calc-page calc-page--full">
       <header className="sub-header calc-header">
-        <button className="back-btn" onClick={() => navigate('/tools')} aria-label="Назад">
+        {/* <button className="back-btn" onClick={() => navigate('/tools')} aria-label="Назад">
           <IconBack />
-        </button>
+        </button> */}
         <h1 className="sub-title">Калькулятор</h1>
         <button
           className={

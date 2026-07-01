@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useSettingsStore, ACCENTS, THEME_OPTIONS } from '@/stores/settings'
-
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 /**
  * Appearance settings. (Was AppearanceView.vue.)
  * - settings.accentKey/theme read via SELECTORS so the active swatch /
@@ -19,13 +19,14 @@ export default function AppearanceView() {
     if (window.history.length > 1) navigate(-1)
     else navigate('/profile')
   }
+  useTelegramBackButton(goBack)
 
   return (
     <div className="page">
       <header className="sub-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="sub-title">Персонализация</h1>
       </header>
 

@@ -6,6 +6,7 @@ import { useWorkplaceStore } from '@/stores/workplace'
 import { useUiStore } from '@/stores/ui'
 import { formatMoney } from '@/utils/format'
 import OrderDetailsSheet from './OrderDetailsSheet'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 function itemCount(o) {
   return (o.items || []).reduce((s, i) => s + (i.quantity || 0), 0)
@@ -59,6 +60,7 @@ export default function OrderHistoryView() {
     if (window.history.length > 1) navigate(-1)
     else navigate('/home')
   }
+  useTelegramBackButton(goBack)
 
   const onReopen = async (o) => {
     const ui = useUiStore.getState()
@@ -89,9 +91,9 @@ export default function OrderHistoryView() {
   return (
     <div className="page oh-page">
       <header className="oh-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="oh-title">История заказов</h1>
       </header>
 

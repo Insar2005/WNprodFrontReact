@@ -4,6 +4,7 @@ import { useRemindersStore, leadLabel } from '@/stores/reminders'
 import { useUiStore } from '@/stores/ui'
 import ReminderFormModal from './ReminderFormModal'
 import '@/styles/reminders.css'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 const startOfDay = (d) => {
   const x = new Date(d)
@@ -77,6 +78,9 @@ function ReminderRow({ r, label, anim, onToggle, onOpen, onDelete }) {
 
 export default function RemindersView() {
   const navigate = useNavigate()
+  useTelegramBackButton(() => {
+    navigate('/tools')
+  })
   const items = useRemindersStore((s) => s.items)
   const isLoading = useRemindersStore((s) => s.isLoading)
   const loaded = useRemindersStore((s) => s.loaded)
@@ -183,9 +187,9 @@ export default function RemindersView() {
   return (
     <div className="page">
       <header className="sub-header">
-        <button className="back-btn" onClick={() => navigate('/tools')} aria-label="Назад">
+        {/* <button className="back-btn" onClick={() => navigate('/tools')} aria-label="Назад">
           <IconBack />
-        </button>
+        </button> */}
         <h1 className="sub-title">Напоминания</h1>
       </header>
 

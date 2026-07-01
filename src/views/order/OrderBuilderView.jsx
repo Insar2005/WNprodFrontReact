@@ -17,7 +17,7 @@ import CartContent from './CartContent'
 import TablePickerSheet from './TablePickerSheet'
 import { GuestCountDialog, GuestBar } from './OrderGuests'
 import '@/styles/order-builder.css'
-
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 function pluralize(n, forms) {
   const a = Math.abs(n) % 100
   const b = a % 10
@@ -407,6 +407,8 @@ onAddToCart(item)
     if (window.history.length > 1) navigate(-1)
     else navigate('/map')
   }
+  
+  useTelegramBackButton(goBack)
   const goToMenuEditor = () => navigate('/menu')
 
   const onSelectCategory = (id) => {
@@ -481,9 +483,9 @@ onAddToCart(item)
   return (
     <div className="ob-page">
       <header className="ob-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="ob-title">{title}</h1>
         {!draftIsEmpty && !editingPaidId && (
           <button className="ob-clear-btn" onClick={onClearDraft} aria-label="Очистить корзину">

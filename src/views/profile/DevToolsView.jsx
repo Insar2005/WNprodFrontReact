@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useUiStore } from '@/stores/ui'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 /**
  * Dev tools — only reachable when USE_MOCK is true (Profile gates the row).
@@ -21,7 +22,7 @@ export default function DevToolsView() {
     if (window.history.length > 1) navigate(-1)
     else navigate('/profile')
   }
-
+  useTelegramBackButton(goBack)
   const onSeed = async () => {
     const ui = useUiStore.getState()
     try {
@@ -57,9 +58,9 @@ export default function DevToolsView() {
   return (
     <div className="page">
       <header className="sub-header">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="sub-title">Dev tools</h1>
       </header>
 
