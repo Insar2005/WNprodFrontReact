@@ -12,6 +12,7 @@ import BottomSheet from '@/components/BottomSheet'
 import MenuTwoPanel from '@/views/menu/MenuTwoPanel'
 import MenuPickRow from './MenuPickRow'
 import SearchWithTopOfShift from './SearchWithTopOfShift'
+import { matchesMenuQuery } from '@/utils/menuSearch'
 import CartContent from './CartContent'
 import TablePickerSheet from './TablePickerSheet'
 import { GuestCountDialog, GuestBar } from './OrderGuests'
@@ -106,13 +107,16 @@ export default function OrderBuilderView() {
     return m
   }, [menuCategories])
 
-  const searchResults = useMemo(() => {
-    const q = (searchQuery || '').trim().toLowerCase()
-    if (!q) return []
-    return menuItems
-      .filter((i) => i.is_active && i.title.toLowerCase().includes(q))
-      .sort((a, b) => a.title.localeCompare(b.title))
-  }, [menuItems, searchQuery])
+  // Prefix-per-word match: query "га" hits "Гамбургер" (word start)
+// but not "Мангале" (mid-word). See utils/menuSearch for the exact
+// rule.
+const searchResults = useMemo(() => {
+const q = (searchQuery || '').trim()
+if (!q) return []
+return menuItems
+.filter((i) => i.is_active && matchesMenuQuery(i.title, q))
+.sort((a, b) => a.title.localeCompare(b.title))
+}, [menuItems, searchQuery])
 
   // === Derived draft values ===
   const draftItems = useMemo(() => draft?.items || [], [draft?.items])

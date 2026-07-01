@@ -6,6 +6,7 @@ import MenuTwoPanel from './MenuTwoPanel'
 import MenuItemRow from './MenuItemRow'
 import CategoryFormModal from './CategoryFormModal'
 import MenuItemFormModal from './MenuItemFormModal'
+import { matchesMenuQueryAcross } from '@/utils/menuSearch'
 
 /**
  * Menu editor with the two-panel layout (designer redesign, June 2026):
@@ -59,16 +60,17 @@ export default function MenuEditorView() {
         : [],
     [items, selectedCategoryId],
   )
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return []
-    return items.filter(
-      (i) =>
-        i.title.toLowerCase().includes(q) ||
-        (i.description || '').toLowerCase().includes(q) ||
-        (i.portion || '').toLowerCase().includes(q),
-    )
-  }, [items, searchQuery])
+  // Prefix-per-word across title + description + portion. Query "300 г"
+// could hit "300 г" in portion of a "Куриный суп"; query "кури" hits
+// "куриный" in title. All query terms must land — but they can land
+// in different fields.
+const searchResults = useMemo(() => {
+const q = searchQuery.trim()
+if (!q) return []
+return items.filter((i) =>
+matchesMenuQueryAcross([i.title, i.description, i.portion], q),
+)
+}, [items, searchQuery])
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1)

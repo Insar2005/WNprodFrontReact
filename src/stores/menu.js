@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { menuApi } from '@/api/menu'
+import { matchesMenuQuery } from '@/utils/menuSearch'
 
 // Shared timer handle for the highlightItem auto-clear. Lives in module
   // scope so nested highlightItem() calls can cancel the previous timeout
@@ -253,16 +254,20 @@ highlightItem: (id) => {
   },
 
   /**
-   * Search across all items by title (case-insensitive).
-   * Used by editor & OrderBuilder.
-   */
+
+
+Search across all items by title. Uses prefix-per-word matching:
+"га" matches "Гамбургер" (word start) but not "Мангале" (mid-word).
+See utils/menuSearch for the exact rule.
+*/
+
   searchItems: (query) => {
-    const q = (query || '').trim().toLowerCase()
-    if (!q) return []
-    return get()
-      .items.filter((i) => i.title.toLowerCase().includes(q))
-      .sort((a, b) => a.title.localeCompare(b.title))
-  },
+const q = (query || '').trim()
+if (!q) return []
+return get()
+.items.filter((i) => matchesMenuQuery(i.title, q))
+.sort((a, b) => a.title.localeCompare(b.title))
+},
 
   reset: () => {
     set({
