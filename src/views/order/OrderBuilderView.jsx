@@ -11,6 +11,8 @@ import { hapticImpact } from '@/utils/telegram'
 import BottomSheet from '@/components/BottomSheet'
 import MenuTwoPanel from '@/views/menu/MenuTwoPanel'
 import MenuPickRow from './MenuPickRow'
+import SearchWithTopOfShift from './SearchWithTopOfShift'
+import { bumpTopForItem } from '@/utils/topOfShift'
 import CartContent from './CartContent'
 import TablePickerSheet from './TablePickerSheet'
 import { GuestCountDialog, GuestBar } from './OrderGuests'
@@ -28,7 +30,23 @@ function pluralize(n, forms) {
 /**
  * Order builder. (Was OrderBuilderView.vue.)
  *
- * ── Vue → React notes ───────────────────────────────────────────────
+ * Recent changes (June 2026):
+ *   • Two snap points only (collapsed/expanded). Tap on the handle area
+ *     toggles between them; drag still works. Mid-snap removed.
+ *   • SearchWithTopOfShift replaces the plain search input — opens a
+ *     "Top of shift" dropdown on focus showing the user's most-clicked
+ *     items for the current shift.
+ *   • GuestBar is now ALWAYS visible (above the two-panel layout, not
+ *     inside its headerSlot) — even during search — so the user can
+ *     switch the active guest while picking dishes.
+ *   • Search results show a category breadcrumb (pathLabel) under each
+ *     item's title. Tapping a result clears the query, jumps to that
+ *     item's category, bumps the top-of-shift counter, and dismisses
+ *     the keyboard.
+ *   • Tapping a category in the rail also blurs any active input,
+ *     so the keyboard collapses when the user leaves search mode.
+ *
+ * ── Vue → React notes (original migration) ──────────────────────────
  * - Three URL modes via useSearchParams, read once into useState: ?table_id
  *   (new), ?edit_paid (edit a paid order), ?add_to_order (append items).
  * - draft getters are methods → subscribe to raw `draft` + menu raw state,
@@ -51,6 +69,10 @@ export default function OrderBuilderView() {
   const selectedCategoryId = useMenuStore((s) => s.selectedCategoryId)
   const currency = useWorkplaceStore((s) => s.current()?.currency ?? 'RUB')
   const currentId = useWorkplaceStore((s) => s.currentId)
+  // Current open shift — feeds the per-shift "top of shift" search dropdown.
+  // null when no shift is open (defensive — the mount effect already
+  // redirects to /shifts in that case, but the selector runs first).
+  const currentShift = useShiftStore((s) => s.current)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -60,7 +82,12 @@ export default function OrderBuilderView() {
   const [guestDialogOpen, setGuestDialogOpen] = useState(false)
   const cartSheetRef = useRef(null)
 
-  const snapPoints = useMemo(() => [180, 0.55, 0.92], [])
+  // Two snap points only: collapsed (~180px shows summary + table plate)
+  // and expanded (92% of viewport). Tap on the handle/header toggles
+  // between them; drag works as usual. The mid-snap (0.55) was removed
+  // because it created a "stuck halfway" state that didn't match the
+  // designer's two-mode behaviour.
+  const snapPoints = useMemo(() => [180, 0.92], [])
 
   // Read the URL modes once.
   const [editingPaidId] = useState(() => searchParams.get('edit_paid') || null)
@@ -76,6 +103,14 @@ export default function OrderBuilderView() {
     if (!selectedCategoryId) return []
     return menuItems.filter((i) => i.category_id === selectedCategoryId && i.is_active)
   }, [menuItems, selectedCategoryId])
+
+  // Quick lookup: category by id → used to build breadcrumb labels
+  // ("Завтраки") under search results and inside the top-of-shift dropdown.
+  const categoryById = useMemo(() => {
+    const m = {}
+    for (const c of menuCategories) m[c.id] = c
+    return m
+  }, [menuCategories])
 
   const searchResults = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase()
@@ -221,6 +256,20 @@ export default function OrderBuilderView() {
   const onAddToCart = (item) => {
     useOrderStore.getState().addToDraft(item, { guest: activeGuest })
     hapticImpact('light')
+  }
+
+  /**
+   * Common picker for both "search result tapped" and "top-of-shift row
+   * tapped". Bumps the per-shift click counter so future visits surface
+   * popular items, jumps to the item's category (so when the search
+   * closes the user lands on the right page, not a stale one), clears
+   * the query (which also dismisses the keyboard), and adds to cart.
+   */
+  const onPickFromSearch = (item) => {
+    bumpTopForItem(currentShift?.id ?? null, item.id)
+    useMenuStore.getState().selectCategory(item.category_id)
+    setSearchQuery('')
+    onAddToCart(item)
   }
 
   const onAddGuest = () => {
@@ -369,6 +418,19 @@ export default function OrderBuilderView() {
   }
   const goToMenuEditor = () => navigate('/menu')
 
+  /**
+   * Wrapped category-select handler. Blurs any active input first so the
+   * mobile keyboard dismisses when the user moves on from a search.
+   * Without this, on iOS the keyboard can stay docked even after the
+   * search input is hidden, covering half the screen.
+   */
+  const onSelectCategory = (id) => {
+    if (typeof document !== 'undefined' && document.activeElement?.blur) {
+      document.activeElement.blur()
+    }
+    useMenuStore.getState().selectCategory(id)
+  }
+
   const title = editingPaidId
     ? `Изменение заказа${contextTableNum ? ` · стол №${contextTableNum}` : ''}`
     : addingToOrderId
@@ -445,19 +507,31 @@ export default function OrderBuilderView() {
         )}
       </header>
 
-      <div className="search-wrap">
-        <input
-          type="search"
-          className="search-input"
-          placeholder="Поиск по меню…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+      {/* Search input with Top-of-Shift dropdown. The dropdown opens on
+          focus only when the field is empty — once the user types, the
+          parent (this view) shows actual results below. */}
+      <SearchWithTopOfShift
+        value={searchQuery}
+        onChange={setSearchQuery}
+        shiftId={currentShift?.id ?? null}
+        items={menuItems}
+        categoryById={categoryById}
+        onPick={onPickFromSearch}
+      />
+
+      {/* GuestBar lives ABOVE the panels/search area so it's visible in
+          every mode (browsing menu, searching, even with results
+          showing). It also gets the full screen width instead of being
+          squeezed inside the sheet handle as it used to be. */}
+      <div className="ob-guest-bar-wrap">
+        <GuestBar
+          guestCount={guestCount}
+          selected={activeGuest}
+          counts={guestCounts}
+          onSelect={setSelectedGuest}
+          onAdd={onAddGuest}
+          onRemove={onRemoveGuest}
         />
-        {searchQuery && (
-          <button className="search-clear" onClick={() => setSearchQuery('')}>
-            ×
-          </button>
-        )}
       </div>
 
       {searchQuery ? (
@@ -470,58 +544,52 @@ export default function OrderBuilderView() {
             <>
               <p className="ob-search-count">Найдено: {searchResults.length}</p>
               <div className="ob-items">
-                {searchResults.map((item) => (
-                  <MenuPickRow
-                    key={item.id}
-                    item={item}
-                    currency={currency}
-                    quantity={qtyOf(item.id)}
-                    onAdd={onAddToCart}
-                  />
-                ))}
+                {searchResults.map((item) => {
+                  const cat = categoryById[item.category_id]
+                  return (
+                    <MenuPickRow
+                      key={item.id}
+                      item={item}
+                      currency={currency}
+                      quantity={qtyOf(item.id)}
+                      pathLabel={cat?.title ?? null}
+                      onAdd={onPickFromSearch}
+                    />
+                  )
+                })}
               </div>
             </>
           )}
         </section>
       ) : (
-    <>
-      {activeCategories.length === 0 ? (
-        <div className="ob-empty ob-empty--centered">
-          <p>В меню нет активных категорий.</p>
-          <button className="btn-link" onClick={goToMenuEditor}>
-            Открыть редактор
-          </button>
-        </div>
-      ) : (
-        <MenuTwoPanel
-          categories={activeCategories}
-          selectedId={selectedCategoryId}
-          items={activeItems}
-          onSelect={(id) => useMenuStore.getState().selectCategory(id)}
-          emptyText="В этой категории пока нет позиций"
-          headerSlot={
-            <GuestBar
-              guestCount={guestCount}
-              selected={activeGuest}
-              counts={guestCounts}
-              onSelect={setSelectedGuest}
-              onAdd={onAddGuest}
-              onRemove={onRemoveGuest}
-            />
-          }
-          renderItem={(item) => (
-            <MenuPickRow
-              key={item.id}
-              item={item}
-              currency={currency}
-              quantity={qtyOf(item.id)}
-              onAdd={onAddToCart}
+        <>
+          {activeCategories.length === 0 ? (
+            <div className="ob-empty ob-empty--centered">
+              <p>В меню нет активных категорий.</p>
+              <button className="btn-link" onClick={goToMenuEditor}>
+                Открыть редактор
+              </button>
+            </div>
+          ) : (
+            <MenuTwoPanel
+              categories={activeCategories}
+              selectedId={selectedCategoryId}
+              items={activeItems}
+              onSelect={onSelectCategory}
+              emptyText="В этой категории пока нет позиций"
+              renderItem={(item) => (
+                <MenuPickRow
+                  key={item.id}
+                  item={item}
+                  currency={currency}
+                  quantity={qtyOf(item.id)}
+                  onAdd={onAddToCart}
+                />
+              )}
             />
           )}
-        />
+        </>
       )}
-    </>
-  )}
 
       <BottomSheet
         ref={cartSheetRef}

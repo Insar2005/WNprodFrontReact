@@ -29,3 +29,25 @@
   min-height: 0;
   overflow-y: auto;
 }
+
+
+/* GuestBar wrapper — now lives above the items/rail layout, not
+   inside the sheet handle. Has its own horizontal padding and a
+   bottom rule so it reads as a distinct band. */
+.ob-guest-bar-wrap {
+  flex-shrink: 0;
+  padding: 4px 16px 6px;
+  border-bottom: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg);
+}
+
+/* Inside the bar, give the chips a bit more breathing room than the
+   sheet-header version had. */
+.ob-guest-bar-wrap .gb-scroll {
+  padding: 4px 0;
+}
+
+
+.ob-guest-bar-wrap .gb-scroll {
+  padding: 4px 0;
+}

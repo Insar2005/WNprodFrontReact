@@ -7,6 +7,11 @@ import { useEffect, useRef, useState } from 'react'
  * snapPoints: distances from the BOTTOM in px (already resolved from any
  * fractions by the caller).
  *
+ * Tap-vs-drag detection: if the pointer barely moved (< 6px total) and was
+ * down for less than 250ms, treat it as a TAP and toggle between the
+ * first and last snap point (instead of snapping to "closest"). This lets
+ * a user tap the header to expand/collapse the sheet without dragging.
+ *
  * ── Vue → React notes ───────────────────────────────────────────────
  * - currentHeight/currentSnapIdx/isDragging/isAnimating affect render →
  *   useState. Drag tracking is bookkeeping → refs.
@@ -54,13 +59,21 @@ export function useDraggableSheet({ snapPoints, initialIdx = 0, onSnapChange } =
     const drag = {
       startY: 0,
       startHeight: 0,
+      startTime: 0,
       pointerId: null,
       lastHeight: 0,
       lastTime: 0,
       velocity: 0,
+      maxDelta: 0, // largest absolute Y movement during this gesture
       rafScheduled: false,
     }
     let animTimer = null
+
+    // Tap = barely moved (< 6px) and quick (< 250ms). Anything else is
+    // a drag — even a slow press, since the user clearly intended to
+    // grab and hold.
+    const TAP_MAX_DELTA = 6
+    const TAP_MAX_DURATION = 250
 
     function snapTo(idx) {
       const c = cfg.current
@@ -100,6 +113,11 @@ export function useDraggableSheet({ snapPoints, initialIdx = 0, onSnapChange } =
     function onMove(e) {
       if (e.pointerId !== drag.pointerId) return
       e.preventDefault()
+      // Track max absolute delta for tap-detection in onUp. Doing it here
+      // (not inside the rAF) means even tiny moves that don't make it
+      // into a frame still count, so the tap check is faithful.
+      const dy = Math.abs(e.clientY - drag.startY)
+      if (dy > drag.maxDelta) drag.maxDelta = dy
       if (drag.rafScheduled) return
       drag.rafScheduled = true
       requestAnimationFrame(() => {
@@ -127,7 +145,23 @@ export function useDraggableSheet({ snapPoints, initialIdx = 0, onSnapChange } =
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
-      snapTo(pickSnapTarget(drag.lastHeight, drag.velocity))
+
+      const duration = performance.now() - drag.startTime
+      const isTap =
+        drag.maxDelta < TAP_MAX_DELTA && duration < TAP_MAX_DURATION
+
+      if (isTap) {
+        // Toggle: from any snap go to the OPPOSITE end (first ↔ last).
+        // With 2 snaps this is literally "the other one"; with more, we
+        // pick whichever end is farther so a tap consistently flips the
+        // sheet between collapsed and expanded.
+        const c = cfg.current
+        const last = c.snapPoints.length - 1
+        const target = c.currentSnapIdx === last ? 0 : last
+        snapTo(target)
+      } else {
+        snapTo(pickSnapTarget(drag.lastHeight, drag.velocity))
+      }
     }
 
     function handlePointerDown(e) {
@@ -136,9 +170,11 @@ export function useDraggableSheet({ snapPoints, initialIdx = 0, onSnapChange } =
       drag.pointerId = e.pointerId
       drag.startY = e.clientY
       drag.startHeight = cfg.current.currentHeight
+      drag.startTime = performance.now()
       drag.lastHeight = drag.startHeight
-      drag.lastTime = performance.now()
+      drag.lastTime = drag.startTime
       drag.velocity = 0
+      drag.maxDelta = 0
       cfg.current.setIsDragging(true)
       cfg.current.setIsAnimating(false)
       e.target.setPointerCapture?.(e.pointerId)
