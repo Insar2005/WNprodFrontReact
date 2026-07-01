@@ -4509,3 +4509,96 @@ input::placeholder, textarea::placeholder {
 .ob-guest-bar-wrap .gb-scroll {
   padding: 4px 0;
 }
+
+/* ==========================================================================
+   Search "Скрыть" button (dismiss keyboard on mobile).
+   Добавить в конец src/styles/global.css.
+   Заменяет старые стили для дропдауна "Топ за смену" — их можно оставить,
+   они больше не используются, но и не мешают.
+   ========================================================================== */
+
+/* "Скрыть" pill — appears in the empty focused search input as a
+   deliberate way for the waiter to dismiss the mobile keyboard.
+   Positioned like the "×" clear button but with text instead of a
+   glyph, so it's obvious what it does. */
+.search-hide-kb {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-accent-ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.search-hide-kb:active {
+  background: var(--wn-bg-recessed);
+}
+
+/* ==========================================================================
+   Highlight pulse for a search-picked menu item.
+   Добавить в конец src/styles/global.css.
+
+   Триггерится через className .mir-row--highlight (см. MenuItemRow).
+   Двухсекундная анимация: сначала яркая рамка + фон, потом плавно
+   утухает до нормального состояния. После этого React снимет класс
+   (highlightedItemId сбросится в store), и переход обратно тоже плавный.
+   ========================================================================== */
+
+.mir-row--highlight {
+  animation: mir-highlight-pulse 2s ease-out;
+  /* transition отвечает за плавное возвращение к обычному стилю после
+     того как класс снимется — без него был бы резкий переход. */
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, background-color 0.3s ease;
+}
+
+@keyframes mir-highlight-pulse {
+  0% {
+    /* Стартовое состояние — заметная вспышка */
+    box-shadow: 0 0 0 3px var(--wn-accent),
+                0 0 24px 4px color-mix(in srgb, var(--wn-accent) 55%, transparent);
+    border-color: var(--wn-accent);
+    background-color: color-mix(in srgb, var(--wn-accent) 22%, var(--wn-bg-elevated));
+  }
+  30% {
+    /* Первая волна: чуть слабее, но всё ещё яркая */
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--wn-accent) 40%, transparent),
+                0 0 32px 8px color-mix(in srgb, var(--wn-accent) 30%, transparent);
+    border-color: var(--wn-accent);
+    background-color: color-mix(in srgb, var(--wn-accent) 16%, var(--wn-bg-elevated));
+  }
+  60% {
+    /* Вторая волна: расширяется, тухнет */
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--wn-accent) 15%, transparent),
+                0 0 40px 12px color-mix(in srgb, var(--wn-accent) 12%, transparent);
+    border-color: color-mix(in srgb, var(--wn-accent) 60%, var(--wn-glass-border-subtle));
+    background-color: color-mix(in srgb, var(--wn-accent) 8%, var(--wn-bg-elevated));
+  }
+  100% {
+    /* Возврат к нормальному */
+    box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent;
+    border-color: var(--wn-glass-border-subtle);
+    background-color: var(--wn-bg-elevated);
+  }
+}
+
+/* Уважаем настройку системы "уменьшить движение" — некоторые пользователи
+   выставляют её на iOS/Android чтобы избежать укачивания и мигания.
+   Показываем статичную подсветку вместо пульсации. */
+@media (prefers-reduced-motion: reduce) {
+  .mir-row--highlight {
+    animation: none;
+    border-color: var(--wn-accent);
+    background-color: color-mix(in srgb, var(--wn-accent) 12%, var(--wn-bg-elevated));
+  }
+}

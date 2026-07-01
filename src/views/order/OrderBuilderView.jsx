@@ -12,7 +12,6 @@ import BottomSheet from '@/components/BottomSheet'
 import MenuTwoPanel from '@/views/menu/MenuTwoPanel'
 import MenuPickRow from './MenuPickRow'
 import SearchWithTopOfShift from './SearchWithTopOfShift'
-import { bumpTopForItem } from '@/utils/topOfShift'
 import CartContent from './CartContent'
 import TablePickerSheet from './TablePickerSheet'
 import { GuestCountDialog, GuestBar } from './OrderGuests'
@@ -30,33 +29,23 @@ function pluralize(n, forms) {
 /**
  * Order builder. (Was OrderBuilderView.vue.)
  *
- * Recent changes (June 2026):
- *   • Two snap points only (collapsed/expanded). Tap on the handle area
- *     toggles between them; drag still works. Mid-snap removed.
- *   • SearchWithTopOfShift replaces the plain search input — opens a
- *     "Top of shift" dropdown on focus showing the user's most-clicked
- *     items for the current shift.
- *   • GuestBar is now ALWAYS visible (above the two-panel layout, not
- *     inside its headerSlot) — even during search — so the user can
- *     switch the active guest while picking dishes.
- *   • Search results show a category breadcrumb (pathLabel) under each
- *     item's title. Tapping a result clears the query, jumps to that
- *     item's category, bumps the top-of-shift counter, and dismisses
- *     the keyboard.
- *   • Tapping a category in the rail also blurs any active input,
- *     so the keyboard collapses when the user leaves search mode.
+ * Recent changes (July 2026):
+ *   • Cart BottomSheet is HIDDEN during search mode (searchQuery !== '')
+ *     — the sheet used to sit at the bottom of the screen and its
+ *     overlay area (empty margins to the left and right of the small
+ *     summary text) accidentally passed clicks up to the search input,
+ *     which re-opened the keyboard. Rendering the sheet with
+ *     visible={false} while searching removes it from the tree
+ *     entirely, eliminating that whole overlay layer.
+ *   • Search dropdown "Top of shift" removed at customer's request —
+ *     see SearchWithTopOfShift for details.
+ *   • Search results tap = navigate to category + clear query + add
+ *     to cart, all in one action. (No longer just "navigate to folder".)
+ *   • Guests bar stays above menu content in every mode.
  *
- * ── Vue → React notes (original migration) ──────────────────────────
- * - Three URL modes via useSearchParams, read once into useState: ?table_id
- *   (new), ?edit_paid (edit a paid order), ?add_to_order (append items).
- * - draft getters are methods → subscribe to raw `draft` + menu raw state,
- *   derive itemCount/total/isEmpty and category/search lists via useMemo;
- *   call draftQuantityOfMenuItem(id) per row.
- * - onMounted setup (shift guard + draft seeding) → a mount effect; it reads
- *   the URL and seeds the store (external system), the allowed effect kind.
- * - cart BottomSheet via ref so the header tap can snapTo(1).
- * - $emit handlers → store actions; post-submit router.replace → navigate.
- * ─────────────────────────────────────────────────────────────────────
+ * Previous notes on the Vue → React port are still accurate; the URL
+ * modes (?table_id, ?edit_paid, ?add_to_order), draft derivation,
+ * mount effect and cart-sheet ref all work the same as before.
  */
 export default function OrderBuilderView() {
   const navigate = useNavigate()
@@ -67,11 +56,14 @@ export default function OrderBuilderView() {
   const menuItems = useMenuStore((s) => s.items)
   const menuCategories = useMenuStore((s) => s.categories)
   const selectedCategoryId = useMenuStore((s) => s.selectedCategoryId)
+// Which item is currently pulsing after a search-result pick.
+// Auto-clears in the store after ~2s.
+  const highlightedItemId = useMenuStore((s) => s.highlightedItemId)
   const currency = useWorkplaceStore((s) => s.current()?.currency ?? 'RUB')
   const currentId = useWorkplaceStore((s) => s.currentId)
-  // Current open shift — feeds the per-shift "top of shift" search dropdown.
-  // null when no shift is open (defensive — the mount effect already
-  // redirects to /shifts in that case, but the selector runs first).
+  // currentShift is still selected because SearchWithTopOfShift props
+  // include a shiftId slot (kept for API compatibility with the older
+  // "top of shift" iteration). Harmless to leave subscribed.
   const currentShift = useShiftStore((s) => s.current)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -82,18 +74,20 @@ export default function OrderBuilderView() {
   const [guestDialogOpen, setGuestDialogOpen] = useState(false)
   const cartSheetRef = useRef(null)
 
+  // True whenever the user is in search mode. Used to hide the cart
+  // BottomSheet (its overlay area was leaking clicks up to the search
+  // input beneath it — see the header comment above).
+  const isSearching = searchQuery.trim() !== ''
+
   // Two snap points only: collapsed (~180px shows summary + table plate)
-  // and expanded (92% of viewport). Tap on the handle/header toggles
-  // between them; drag works as usual. The mid-snap (0.55) was removed
-  // because it created a "stuck halfway" state that didn't match the
-  // designer's two-mode behaviour.
+  // and expanded (92% of viewport). Tap on the handle toggles between
+  // them; drag works as usual.
   const snapPoints = useMemo(() => [180, 0.92], [])
 
-  // Read the URL modes once.
   const [editingPaidId] = useState(() => searchParams.get('edit_paid') || null)
   const [addingToOrderId] = useState(() => searchParams.get('add_to_order') || null)
 
-  // === Derived menu lists (getters are methods → derive here) ===
+  // === Derived menu lists ===
   const allCategories = menuCategories
   const activeCategories = useMemo(
     () => menuCategories.filter((c) => c.is_active),
@@ -105,7 +99,7 @@ export default function OrderBuilderView() {
   }, [menuItems, selectedCategoryId])
 
   // Quick lookup: category by id → used to build breadcrumb labels
-  // ("Завтраки") under search results and inside the top-of-shift dropdown.
+  // ("Завтраки") under search-result rows.
   const categoryById = useMemo(() => {
     const m = {}
     for (const c of menuCategories) m[c.id] = c
@@ -132,24 +126,18 @@ export default function OrderBuilderView() {
     [draftItems],
   )
   const guestCount = draft?.guestCount || 1
-  // Clamp selection into range (e.g. after a guest is removed) without an effect.
   const activeGuest = Math.min(selectedGuest, guestCount) || 1
 
-  // When adding to an existing order — its current items, shown as read-only
-  // context in the cart so it's clear who already has what.
   const contextItems = useMemo(() => {
     if (!addingToOrderId) return []
     return orders.find((o) => o.id === addingToOrderId)?.items || []
   }, [addingToOrderId, orders])
 
-  // Quantity of a menu item for the CURRENTLY selected guest (drives the
-  // badge/qty on menu cards, so building each guest's order is independent).
   const qtyOf = (menuItemId) =>
     draftItems
       .filter((i) => i.menu_item_id === menuItemId && (i.guest || 1) === activeGuest)
       .reduce((sum, i) => sum + i.quantity, 0)
 
-  // Item quantity per guest, for the small badge on each guest tab.
   const guestCounts = useMemo(() => {
     const m = {}
     for (const i of draftItems) {
@@ -176,7 +164,6 @@ export default function OrderBuilderView() {
 
   const canSubmit = !draftIsEmpty
 
-  // === Mount setup: shift guard + draft seeding (reads URL, seeds store) ===
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const order = useOrderStore.getState()
@@ -217,11 +204,6 @@ export default function OrderBuilderView() {
       return
     }
 
-    // Starting/continuing a NEW order. The guest dialog must appear whenever
-    // you begin a fresh order (tap any free table or "Взять заказ"). We only
-    // resume an existing draft when it's the SAME table (or a non-empty
-    // table-less cart) — otherwise a leftover guest count from another table
-    // would carry over.
     const queryTableId = searchParams.get('table_id')
     const d = order.draft
     const draftHasItems = !!d && d.items.length > 0
@@ -232,17 +214,13 @@ export default function OrderBuilderView() {
         order.startDraft({ tableId: tid, hallId: t?.hall_id || null })
         setGuestDialogOpen(true)
       }
-      // same table → resume current draft (keep items + guests)
     } else if (!d || !draftHasItems) {
-      // Table-less "Взять заказ": start fresh + ask, unless resuming a
-      // non-empty table-less cart.
       order.startDraft()
       setGuestDialogOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Default-select a category once the menu loads.
   useEffect(() => {
     if (allCategories.length > 0 && !selectedCategoryId) {
       const first = activeCategories[0]?.id || allCategories[0]?.id
@@ -259,18 +237,29 @@ export default function OrderBuilderView() {
   }
 
   /**
-   * Common picker for both "search result tapped" and "top-of-shift row
-   * tapped". Bumps the per-shift click counter so future visits surface
-   * popular items, jumps to the item's category (so when the search
-   * closes the user lands on the right page, not a stale one), clears
-   * the query (which also dismisses the keyboard), and adds to cart.
+   * Tap on a search-result row: navigate to the item's category, close
+   * search, add to cart. The customer complained that tapping a result
+   * only "navigated to the folder" without adding — this handler makes
+   * both happen in one gesture.
+   *
+   * The order matters: we blur first (so the keyboard drops), then
+   * clear the query (which flips `isSearching` and unhides the cart
+   * sheet), then select the item's category (so if the user later opens
+   * search-empty they land on the right menu page), then add.
    */
   const onPickFromSearch = (item) => {
-    bumpTopForItem(currentShift?.id ?? null, item.id)
-    useMenuStore.getState().selectCategory(item.category_id)
-    setSearchQuery('')
-    onAddToCart(item)
-  }
+if (typeof document !== 'undefined' && document.activeElement?.blur) {
+document.activeElement.blur()
+}
+setSearchQuery('')
+// selectCategory clears any prior highlight (see store), so call it
+// FIRST, then set the fresh highlight for this picked item. Order
+// matters — flipping these two lines would wipe the highlight we
+// just tried to set.
+useMenuStore.getState().selectCategory(item.category_id)
+useMenuStore.getState().highlightItem(item.id)
+onAddToCart(item)
+}
 
   const onAddGuest = () => {
     useOrderStore.getState().addGuest()
@@ -386,8 +375,6 @@ export default function OrderBuilderView() {
       danger: true,
     })
     if (!ok) return
-    // Only the dish positions are removed — table, hall and the chosen
-    // number of guests stay (in add-to-order mode keep the order's guests).
     if (addingToOrderId) {
       const o = order.orderById(addingToOrderId)
       order.replaceDraftEphemeral({
@@ -418,12 +405,6 @@ export default function OrderBuilderView() {
   }
   const goToMenuEditor = () => navigate('/menu')
 
-  /**
-   * Wrapped category-select handler. Blurs any active input first so the
-   * mobile keyboard dismisses when the user moves on from a search.
-   * Without this, on iOS the keyboard can stay docked even after the
-   * search input is hidden, covering half the screen.
-   */
   const onSelectCategory = (id) => {
     if (typeof document !== 'undefined' && document.activeElement?.blur) {
       document.activeElement.blur()
@@ -507,9 +488,6 @@ export default function OrderBuilderView() {
         )}
       </header>
 
-      {/* Search input with Top-of-Shift dropdown. The dropdown opens on
-          focus only when the field is empty — once the user types, the
-          parent (this view) shows actual results below. */}
       <SearchWithTopOfShift
         value={searchQuery}
         onChange={setSearchQuery}
@@ -519,10 +497,6 @@ export default function OrderBuilderView() {
         onPick={onPickFromSearch}
       />
 
-      {/* GuestBar lives ABOVE the panels/search area so it's visible in
-          every mode (browsing menu, searching, even with results
-          showing). It also gets the full screen width instead of being
-          squeezed inside the sheet handle as it used to be. */}
       <div className="ob-guest-bar-wrap">
         <GuestBar
           guestCount={guestCount}
@@ -534,7 +508,7 @@ export default function OrderBuilderView() {
         />
       </div>
 
-      {searchQuery ? (
+      {isSearching ? (
         <section className="ob-search-results">
           {searchResults.length === 0 ? (
             <div className="ob-empty">
@@ -578,22 +552,29 @@ export default function OrderBuilderView() {
               onSelect={onSelectCategory}
               emptyText="В этой категории пока нет позиций"
               renderItem={(item) => (
-                <MenuPickRow
-                  key={item.id}
-                  item={item}
-                  currency={currency}
-                  quantity={qtyOf(item.id)}
-                  onAdd={onAddToCart}
-                />
-              )}
+            <MenuPickRow
+              key={item.id}
+              item={item}
+              currency={currency}
+              quantity={qtyOf(item.id)}
+              highlighted={item.id === highlightedItemId}
+              onAdd={onAddToCart}
+            />
+          )}
             />
           )}
         </>
       )}
 
+      {/* Cart sheet is HIDDEN while searching — see file header comment.
+          When search closes (query cleared, an item picked, keyboard
+          dismissed), it re-mounts at snap 0. Any expand-state is not
+          preserved across the toggle, which is fine: search is a
+          transient mode and the cart's default (collapsed) view is
+          exactly what the user wants when they return. */}
       <BottomSheet
         ref={cartSheetRef}
-        visible={true}
+        visible={!isSearching}
         snapPoints={snapPoints}
         initialSnap={0}
         header={cartHeader}

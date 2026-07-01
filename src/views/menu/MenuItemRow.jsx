@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { formatMoney } from '@/utils/format'
 
 /**
@@ -9,12 +10,19 @@ import { formatMoney } from '@/utils/format'
  *   • `edit` — used in the menu editor. Tap = open form. Shows a
  *     "скрыто" badge for inactive items; the whole row dims.
  *
+ * `highlighted` (July 2026): when true, the row pulses briefly with the
+ * accent color AND scrolls itself into view. Used by the search flow so
+ * that a picked search result is easy to find in its category. The prop
+ * is controlled by the caller (via useMenuStore.highlightedItemId); this
+ * component only reacts to it.
+ *
  * Props:
  *   item        — { id, title, price, portion, is_active, ... }
  *   currency    — RUB/USD/... for formatMoney
  *   mode        — 'pick' | 'edit'
  *   quantity    — items already in the cart (pick mode); shows "×N" badge
  *   pathLabel   — optional "Категория › Подкатегория" string (search only)
+ *   highlighted — bool; true = pulse & scroll into view
  *   onClick     — (item) => void; row tapped
  *   onInfo      — (item) => void; info button tapped (pick mode only)
  */
@@ -24,9 +32,23 @@ export default function MenuItemRow({
   mode = 'pick',
   quantity = 0,
   pathLabel = null,
+  highlighted = false,
   onClick,
   onInfo,
 }) {
+  const rowRef = useRef(null)
+
+  // Scroll into view whenever highlighted flips ON. useEffect is right
+  // here because we're synchronizing with an external system (DOM
+  // scroll position) — not pushing derived state back into React.
+  useEffect(() => {
+    if (highlighted && rowRef.current) {
+      // 'center' keeps some context above/below visible; 'smooth' feels
+      // like a follow-up to the animation the search dropdown ran.
+      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [highlighted])
+
   const hidden = mode === 'edit' && item.is_active === false
   const inCart = mode === 'pick' && quantity > 0
 
@@ -35,6 +57,7 @@ export default function MenuItemRow({
     `mir-row--${mode}`,
     hidden ? 'mir-row--hidden' : '',
     inCart ? 'mir-row--in-cart' : '',
+    highlighted ? 'mir-row--highlight' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -50,7 +73,7 @@ export default function MenuItemRow({
   }
 
   return (
-    <div className={cls} onClick={handleClick}>
+    <div ref={rowRef} className={cls} onClick={handleClick}>
       {mode === 'pick' && onInfo && (
         <button
           type="button"

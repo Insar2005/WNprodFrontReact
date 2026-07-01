@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { menuApi } from '@/api/menu'
 
+// Shared timer handle for the highlightItem auto-clear. Lives in module
+  // scope so nested highlightItem() calls can cancel the previous timeout
+  // without threading a ref through the store state.
+  let _highlightTimer = null
 /**
  * Menu store: categories + items for the current workplace.
  * Tree is loaded once via getTree(); single-entity mutations update locally.
@@ -42,7 +46,14 @@ export const useMenuStore = create((set, get) => ({
 
   /** Currently-selected category id in the editor UI. */
   selectedCategoryId: null,
-
+  /**
+   * Item id currently "highlighted" — used by the search-result flow so
+   * that after picking a found dish, the row in its category pulses
+   * briefly to show the waiter where it landed. Auto-clears after ~2s
+   * via a timer set in highlightItem(). Reset on category switch too so
+   * a stale highlight doesn't come back when navigating around.
+   */
+  highlightedItemId: null,
   // === getters (were: computed) ===
 
   allCategories: () =>
@@ -110,7 +121,31 @@ export const useMenuStore = create((set, get) => ({
     }
   },
 
-  selectCategory: (id) => set({ selectedCategoryId: id }),
+    selectCategory: (id) =>
+    // Clear any pending highlight when the user changes category
+    // themselves — otherwise a stale pulse could reappear if they
+    // switched away and back within the 2s window.
+    set({ selectedCategoryId: id, highlightedItemId: null }),
+ 
+  /**
+   * Highlight an item briefly (pulse animation in its row) so a search
+   * result the user picked is easy to spot in its category. Consumers:
+   * OrderBuilderView calls this from onPickFromSearch. The timer is
+   * intentionally kept in a module-local variable so consecutive calls
+   * cancel the previous timer instead of overlapping.
+   */
+highlightItem: (id) => {
+    set({ highlightedItemId: id })
+    if (_highlightTimer) clearTimeout(_highlightTimer)
+    _highlightTimer = setTimeout(() => {
+      // Only clear if we're still highlighting THIS id — a fresh call
+      // in the meantime should have its own 2s window.
+      if (get().highlightedItemId === id) {
+        set({ highlightedItemId: null })
+      }
+      _highlightTimer = null
+    }, 2000)
+  },
 
   // ----- Categories -----
 
