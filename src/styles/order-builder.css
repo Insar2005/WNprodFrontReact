@@ -1,29 +1,25 @@
 /* OrderBuilder ("Новый заказ") layout fixes.
-   - Bound the page to the viewport so the category rail and items pane scroll
-     INDEPENDENTLY above the cart sheet (the route is full-screen / hideBottomNav).
-   - Reserve space at the bottom equal to the collapsed cart sheet (~180px) so the
-     last categories/items can scroll into view instead of hiding behind it.
-   - Inset the category rail from the very screen edge.
-   The `.ob-page.ob-page` doubling raises specificity so it wins over the base rule
-   regardless of stylesheet order. */
+   - Bound the page to the viewport so MenuTwoPanel's pane can own its
+     scroll. All MenuTwoPanel-specific overrides moved into the component
+     itself (bottomInset prop) so we don't fork behaviour per host.
+   - In fullscreen (data-tg-fullscreen=true) the .ob-page is inside
+     .app-content--full which is excluded from the top safe-area padding
+     — so THE HEADER has to add it itself. Otherwise "Новый заказ" and
+     the search field get clipped by Telegram's status-bar / back button.
+   The `.ob-page.ob-page` doubling raises specificity so it wins over the
+   base rule regardless of stylesheet order. */
 
 .ob-page.ob-page {
   height: 100%;
   min-height: 0;
 }
 
+/* Optional inset from the left edge — visual only. */
 .ob-page .mtp-wrap {
-  margin: 0;
-  padding-left: 12px;
-  min-height: 0;
+  margin-left: 12px;
 }
 
-.ob-page .mtp-rail,
-.ob-page .mtp-pane {
-  padding-bottom: 200px;
-}
-
-/* When searching, the results list scrolls within the bounded page too. */
+/* Search results list also scrolls within the bounded page. */
 .ob-page .ob-search-results {
   flex: 1;
   min-height: 0;
@@ -31,23 +27,26 @@
 }
 
 
-/* GuestBar wrapper — now lives above the items/rail layout, not
-   inside the sheet handle. Has its own horizontal padding and a
-   bottom rule so it reads as a distinct band. */
+/* GuestBar wrapper — sits above the items/rail layout, not inside the
+   sheet handle. Has its own horizontal padding and a bottom rule so it
+   reads as a distinct band. */
 .ob-guest-bar-wrap {
   flex-shrink: 0;
   padding: 4px 16px 6px;
   border-bottom: 1px solid var(--wn-glass-border-subtle);
   background: var(--wn-bg);
 }
-
-/* Inside the bar, give the chips a bit more breathing room than the
-   sheet-header version had. */
 .ob-guest-bar-wrap .gb-scroll {
   padding: 4px 0;
 }
 
 
-.ob-guest-bar-wrap .gb-scroll {
-  padding: 4px 0;
+/* ── FULLSCREEN safe-area ─────────────────────────────────────────
+   In Telegram fullscreen the .ob-page is bounded (height:100%) and its
+   parent .app-content--full has NO padding-top (it's excluded via :not()
+   in the global rule). So the header itself has to lift below the
+   status-bar / Telegram overlay. min 90px covers iPhone status-bar (54)
+   + Telegram overlay (46). */
+html[data-tg-fullscreen='true'] .ob-header {
+  padding-top: max(90px, calc(12px + var(--wn-safe-top)));
 }

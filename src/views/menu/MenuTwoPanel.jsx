@@ -2,13 +2,8 @@ import { useMemo } from 'react'
 
 /**
  * Two-panel menu layout: vertical category rail on the left + scrollable
- * content pane on the right. Replaces the horizontal CategoryChips
- * idiom on screens that opt in.
- *
- * Used by both MenuEditorView and OrderBuilderView. The caller supplies
- * `renderItem(item)` so each screen controls its own row UI — same
- * MenuItemRow component, just different modes (edit vs pick) and
- * handlers.
+ * content pane on the right. Used by both MenuEditorView and
+ * OrderBuilderView.
  *
  * Layout (from designer mockup, June 2026):
  *   ┌───────┬─────────────────────────────┐
@@ -21,22 +16,28 @@ import { useMemo } from 'react'
  *   └───────┴─────────────────────────────┘
  *  116px wide   flex:1, independent scroll
  *
+ * SCROLL CONTRACT (июль 2026):
+ *   The wrap uses flex:1 with min-height:0 — this requires the HOST page
+ *   to be a bounded flex column (height:100%, min-height:0). Otherwise
+ *   the pane's overflow-y:auto won't engage and the whole app-content
+ *   will scroll instead. Both .menu-page and .ob-page follow that
+ *   pattern; if you build a new host, do the same.
+ *
  * Props
- *   categories    — sorted array of category objects (already filtered
- *                   appropriately — editor passes all, pick passes
- *                   only active).
+ *   categories    — sorted array of category objects (caller filters).
  *   selectedId    — currently-selected category id (controlled).
  *   items         — items of the selected category (caller derives).
  *   onSelect      — (id) => void; category tab tapped.
- *   onAddCategory — () => void; only used when `editable=true`. Renders
- *                   the "+ Категория" button at the rail's end.
- *   editable      — show the strikethrough on inactive categories and
- *                   the "+ Категория" tail button (editor only).
- *   renderItem    — (item) => ReactNode; per-row renderer. Caller decides
- *                   whether to use MenuItemRow in edit or pick mode.
+ *   onAddCategory — () => void; only used when editable=true.
+ *   editable      — show strikethrough for inactive cats + "+ Категория".
+ *   renderItem    — (item) => ReactNode; per-row renderer.
  *   emptyText     — shown when items.length === 0.
- *   headerSlot    — optional ReactNode above the right pane (e.g. the
- *                   "Изменить" link in the editor).
+ *   headerSlot    — optional ReactNode above the right pane.
+ *   bottomInset   — px of padding-bottom for the pane. Use to reserve
+ *                   space for whatever floats over it — a BottomSheet
+ *                   (~200), a FAB (~80), etc. Passed as a CSS custom
+ *                   property so the caller doesn't need to duplicate
+ *                   any host-specific CSS.
  */
 export default function MenuTwoPanel({
   categories,
@@ -48,14 +49,15 @@ export default function MenuTwoPanel({
   renderItem,
   emptyText = 'Нет позиций',
   headerSlot = null,
+  bottomInset = 12,
 }) {
-  // Stable list of rendered categories — sorted by position is the caller's
-  // job; we just trust the order. Use useMemo only if needed; here it's a
-  // pass-through.
   const cats = useMemo(() => categories || [], [categories])
 
   return (
-    <div className="mtp-wrap">
+    <div
+      className="mtp-wrap"
+      style={{ '--mtp-bottom-inset': `${bottomInset}px` }}
+    >
       {/* LEFT — categories rail */}
       <nav className="mtp-rail" role="tablist" aria-label="Категории">
         {cats.map((cat) => {
@@ -77,36 +79,35 @@ export default function MenuTwoPanel({
               onClick={() => onSelect?.(cat.id)}
             >
               <span className="mtp-cat-text">{cat.title}</span>
-              {editable && !cat.is_active && (
-                <span className="mtp-cat-dot" aria-hidden="true">
+              {editable && !cat.is_active ? (
+                <span className="mtp-cat-dot" aria-hidden>
                   ●
                 </span>
-              )}
+              ) : null}
             </button>
           )
         })}
 
-        {editable && (
+        {editable && onAddCategory ? (
           <button
             type="button"
-            className="mtp-cat-add"
-            onClick={() => onAddCategory?.()}
-            aria-label="Новая категория"
+            className="mtp-cat mtp-cat--add"
+            onClick={onAddCategory}
           >
             + Категория
           </button>
-        )}
+        ) : null}
       </nav>
 
       {/* RIGHT — content pane */}
       <div className="mtp-pane">
         {headerSlot}
         {items.length === 0 ? (
-          <div className="mtp-empty">
-            <p className="empty-text">{emptyText}</p>
-          </div>
+          <div className="mtp-empty">{emptyText}</div>
         ) : (
-          <div className="mtp-items">{items.map((it) => renderItem(it))}</div>
+          <div className="mtp-items">
+            {items.map((item) => renderItem?.(item))}
+          </div>
         )}
       </div>
     </div>

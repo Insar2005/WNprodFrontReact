@@ -3,7 +3,7 @@
    These CSS variables are the single source of truth for the visual style.
    Migrating components: replace hardcoded colors / shadows with var(--wn-...).
    ========================================================================== */
-@import './fullscreen-safe-area.css';
+
 :root {
   /* === Surfaces (glass) === */
   --wn-glass-light: rgba(255, 255, 255, 0.72);
@@ -121,6 +121,117 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
+}
+/* ==========================================================================
+Safe area (fullscreen mode) — v6.
+
+── Что поменялось vs v5 ────────────────────────────────────────
+.ob-page и .map-page теряли double-padding: сама страница получала
+padding-top: 90px, ПЛЮС внутренний .ob-header / .map-header имел
+свой padding (12-16px). Итого 100-106px пустого места до заголовка
+на Карте и в OrderBuilder.
+
+v6: убираем padding-top у самих .ob-page и .map-page — весь
+safe-area отступ идёт на их sticky headers. Так же и в fullscreen
+режиме: минимум 90px даётся header'у, а не двум разным элементам.
+
+.calc-page--full оставлена как раньше — у .calc-header нет своего
+padding (только margin-bottom), так что двойного отступа не
+возникает.
+========================================================================== */
+
+:root {
+--wn-safe-top: env(safe-area-inset-top, 0px);
+--wn-safe-bottom: env(safe-area-inset-bottom, 0px);
+--wn-safe-left: env(safe-area-inset-left, 0px);
+--wn-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Обычный (fullsize) режим */
+
+.app-shell .app-content {
+padding-top: var(--wn-safe-top);
+padding-left: var(--wn-safe-left);
+padding-right: var(--wn-safe-right);
+padding-bottom: calc(76px + var(--wn-safe-bottom));
+}
+
+.app-shell .app-content--full {
+padding-top: 0;
+padding-bottom: 0;
+padding-left: var(--wn-safe-left);
+padding-right: var(--wn-safe-right);
+}
+
+/* Фулскрин-страницы БЕЗ своего sticky header с padding — отступ на
+самой странице (для калькулятора). */
+.calc-page--full {
+padding-top: var(--wn-safe-top);
+}
+
+/* Фулскрин-страницы СО своим sticky header — отступ на headers.
+Так избегаем double-padding когда у страницы min-height:100dvh
+и внутри уже padded header. */
+.ob-header,
+.map-header {
+padding-top: calc(12px + var(--wn-safe-top));
+}
+
+/* FULLSCREEN режим — гарантированный минимум 90px (iOS status bar
+~50px + Telegram overlay ~40px). Атрибут data-tg-fullscreen
+ставит telegram.js. */
+
+/* Только "обычные" .app-content — не фулскрин-контейнеры.
+   .app-content--full имеет оба класса, поэтому исключаем его
+   явно через :not() — иначе он получит double-padding с
+   вложенным .map-header / .ob-header. */
+html[data-tg-fullscreen='true']
+  .app-shell .app-content:not(.app-content--full) {
+  padding-top: max(90px, var(--wn-safe-top));
+}
+
+
+html[data-tg-fullscreen='true'] .calc-page--full {
+padding-top: max(90px, var(--wn-safe-top));
+}
+
+
+/* Bottom nav и низовые элементы */
+
+.bottom-nav,
+.nav-bar {
+padding-bottom: var(--wn-safe-bottom);
+}
+
+.fab {
+bottom: calc(24px + var(--wn-safe-bottom));
+}
+
+.bs-sheet {
+padding-bottom: var(--wn-safe-bottom);
+}
+/* Когда шит в верхнем snap (полноэкранный) — сдвигаем handle+header
+   ниже safe-area. В fullscreen Telegram — гарантированный минимум
+   90px. Работает только для этого снапа; во всех остальных снапах
+   шит остаётся компактным. */
+.bs-sheet--top-snap .bs-handle-area {
+  padding-top: var(--wn-safe-top);
+}
+
+html[data-tg-fullscreen='true'] .bs-sheet--top-snap .bs-handle-area {
+  padding-top: max(90px, var(--wn-safe-top));
+}
+
+.toast-stack {
+  top: calc(var(--wn-safe-top) + 12px);
+  left: var(--wn-safe-left);
+  right: var(--wn-safe-right);
+}
+
+/* В fullscreen — гарантированный минимум 90px чтобы тост не 
+   падал под системный статус-бар / шапку Telegram. */
+html[data-tg-fullscreen='true'] .toast-stack {
+  top: calc(max(90px, var(--wn-safe-top)) + 12px);
 }
 
 /* ==========================================================================
@@ -2382,11 +2493,15 @@ input::placeholder, textarea::placeholder {
 /* ==========================================================================
    MenuEditorView (menu-*) + form modal helpers (mn-*).
    ========================================================================== */
+/* Same contract as .ob-page: bounded flex column so the
+   MenuTwoPanel pane inside can own its own overflow-y:auto.
+   padding-bottom under the FAB is handled by the pane itself
+   via bottomInset prop — no more magic 80px here. */
 .menu-page {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-bottom: 80px;
 }
 .menu-header {
   display: flex;
@@ -2793,15 +2908,18 @@ input::placeholder, textarea::placeholder {
   text-align: center;
   gap: 12px;
 }
+
+/* 76px — навбар, ~72px — "Взять заказ" pill + margin, safe-bottom
+   на всякий случай (в fullscreen обычно 0 но всё же). */
 .map-canvas-area {
   flex: 1;
   position: relative;
-  padding-bottom: calc(76px + var(--wn-safe-bottom));
+  padding-bottom: calc(76px + 72px + var(--wn-safe-bottom));
 }
 .map-canvas-area > * {
   position: absolute;
   inset: 0;
-  bottom: calc(76px + var(--wn-safe-bottom));
+  bottom: calc(76px + 72px + var(--wn-safe-bottom));
 }
 
 /* ==========================================================================
@@ -2964,7 +3082,7 @@ input::placeholder, textarea::placeholder {
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom);
+  
   pointer-events: auto;
   will-change: height;
 }
@@ -3583,119 +3701,7 @@ input::placeholder, textarea::placeholder {
 .tps-footer .btn { width: 100%; padding: 12px 16px; border-radius: 10px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; }
 .tps-footer .btn--ghost { background-color: var(--wn-bg); color: var(--wn-ink-soft); }
 
-/* ==========================================================================
-   MenuTwoPanel (mtp-*) — vertical category rail + items pane.
-   Used by MenuEditorView and OrderBuilderView. Two-panel idiom replaces
-   the horizontal chip strip on screens that support it.
-   ========================================================================== */
 
-.mtp-wrap {
-  display: flex;
-  gap: 8px;
-  /* Fill available vertical space without growing past it — the parent
-     pages already constrain height (.app-content scrolls). We give the
-     wrap a min-height so the rail's scroll behavior actually kicks in
-     when there are many categories. */
-  min-height: 360px;
-  /* On the order builder, the cart sheet covers the bottom — leave room
-     so the last item isn't permanently hidden behind it. Editor sets
-     padding-bottom on .menu-page so this is enough on both screens. */
-}
-
-/* LEFT — vertical category rail */
-.mtp-rail {
-  flex: 0 0 116px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* Independent scroll so categories don't push the right pane down on
-     narrow phones with very long lists. */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding: 2px 0 12px 0;
-}
-.mtp-rail::-webkit-scrollbar { display: none; }
-
-.mtp-cat {
-  /* Tap target: at least 44px tall for thumb-friendly tapping. */
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 10px 12px;
-  border: none;
-  background: none;
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--wn-ink-soft);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  /* Long names wrap to two lines instead of overflowing the narrow rail. */
-  white-space: normal;
-  line-height: 1.3;
-  word-break: break-word;
-}
-.mtp-cat:active { background-color: var(--wn-bg-recessed); }
-
-.mtp-cat--active {
-  background-color: var(--wn-accent-fill);
-  color: var(--wn-accent-text);
-  font-weight: 600;
-}
-
-.mtp-cat--inactive .mtp-cat-text {
-  text-decoration: line-through;
-  opacity: 0.65;
-}
-
-.mtp-cat-dot {
-  flex-shrink: 0;
-  font-size: 7px;
-  color: var(--wn-ink-mute);
-  line-height: 1;
-}
-
-.mtp-cat--add {
-  /* Plus button at the end of the rail in editor mode. Dashed border
-     hints "add slot" without competing with real categories. */
-  border: 1px dashed var(--wn-glass-border);
-  color: var(--wn-accent-text);
-  margin-top: 4px;
-  justify-content: center;
-  font-size: 12px;
-}
-.mtp-cat--add:active { background-color: var(--wn-bg-recessed); }
-
-/* RIGHT — items pane */
-.mtp-pane {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  /* Items area scrolls independently so category-tab swaps don't reset
-     the rail's scroll position. */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.mtp-items {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mtp-empty {
-  background-color: var(--wn-bg-elevated);
-  border-radius: 12px;
-  padding: 24px 16px;
-  text-align: center;
-}
 /* ==========================================================================
    ProfileView hero (pf-avatar, pf-hero*) — avatar + display name + handle.
    Replaces the old "tg-id-row" card. The .tg-id-* classes can stay in the
@@ -4601,4 +4607,27 @@ input::placeholder, textarea::placeholder {
     border-color: var(--wn-accent);
     background-color: color-mix(in srgb, var(--wn-accent) 12%, var(--wn-bg-elevated));
   }
+}
+
+
+/* ============================================================================
+   Sub-header safe-area (fullscreen only)
+   ============================================================================
+   Пробуем: Заведения, Напоминания, Калькулятор и другие подстраницы
+   используют паттерн `<div className="page"><header className="sub-header">`.
+   
+   Если такая подстраница открывается в hideBottomNav-режиме, она попадает
+   в .app-content--full который через :not() исключён из fullscreen
+   padding-top. В итоге кнопка «Назад» и заголовок оказываются под чёрной
+   полосой Telegram / статус-бара iPhone.
+   
+   Даём .sub-header в fullscreen тот же min 90px что и .ob-header /
+   .map-header. Итог: заголовок «Заведения» / «Напоминания» встаёт
+   под Telegram overlay без наезда.
+   
+   Правило безвредно вне fullscreen — там data-tg-fullscreen='false' или
+   отсутствует, и правило не применяется. */
+
+html[data-tg-fullscreen='true'] .sub-header {
+  padding-top: max(90px, calc(12px + var(--wn-safe-top)));
 }

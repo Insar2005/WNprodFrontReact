@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useUiStore } from '@/stores/ui'
 
@@ -99,6 +99,28 @@ export default function BottomNavigation() {
   // behind the sheet's backdrop.
   const overlayOpen = useUiStore((s) => s.overlayCount > 0)
 
+  // Backup detection: watch the DOM for any `.sheet-overlay` node. Several
+  // form modals (WorkplaceFormModal, NoteFormModal, ShiftDetailsModal,
+  // CategoryFormModal, MenuItemFormModal) mount a `.sheet-overlay` but
+  // forget to call pushOverlay/popOverlay. With this observer the nav
+  // still hides correctly under any sheet, current or future — no need
+  // to touch each modal one by one. Cheap on modern browsers.
+  const [sheetInDom, setSheetInDom] = useState(false)
+  useEffect(() => {
+    const check = () => {
+      setSheetInDom(!!document.querySelector('.sheet-overlay'))
+    }
+    const observer = new MutationObserver(check)
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+    check()
+    return () => observer.disconnect()
+  }, [])
+
   // Some old WebViews don't support backdrop-filter → fall back to an
   // opaque background. CSS.supports is synchronous, so compute it lazily
   // in the useState initializer (runs once) — no effect needed, which
@@ -144,7 +166,7 @@ export default function BottomNavigation() {
       ? activeIdx * tabWidthPct + tabWidthPct / 2 - tabWidthPct / 4
       : 0
 
-  if (overlayOpen) return null
+  if (overlayOpen || sheetInDom) return null
 
   return (
     <nav className={noBlur ? 'bottom-nav bottom-nav--no-blur' : 'bottom-nav'}>

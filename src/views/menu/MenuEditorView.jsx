@@ -191,6 +191,7 @@ matchesMenuQueryAcross([i.title, i.description, i.portion], q),
               onSelect={(id) => useMenuStore.getState().selectCategory(id)}
               onAddCategory={openCategoryCreate}
               editable
+              bottomInset={80}
               emptyText="В этой категории пока нет позиций"
               headerSlot={
                 selectedCategory && (

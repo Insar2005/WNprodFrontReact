@@ -68,6 +68,7 @@ export default function OrderBuilderView() {
   const currentShift = useShiftStore((s) => s.current)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [tablePickerVisible, setTablePickerVisible] = useState(false)
   const [contextTableNum, setContextTableNum] = useState(null)
@@ -75,10 +76,15 @@ export default function OrderBuilderView() {
   const [guestDialogOpen, setGuestDialogOpen] = useState(false)
   const cartSheetRef = useRef(null)
 
-  // True whenever the user is in search mode. Used to hide the cart
-  // BottomSheet (its overlay area was leaking clicks up to the search
-  // input beneath it — see the header comment above).
+  // Show search-results panel only when there's actually a query.
   const isSearching = searchQuery.trim() !== ''
+
+  // Hide the cart sheet + submit button whenever the search input has
+  // focus OR has content. Empty-focus counts too: when the keyboard is
+  // open (even before the waiter types), the sheet used to peek out
+  // above it and its "Собрать заказ" footer sat on top of the keyboard,
+  // confusing which was the right thing to tap.
+  const searchActive = isSearching || searchFocused
 
   // Two snap points only: collapsed (~180px shows summary + table plate)
   // and expanded (92% of viewport). Tap on the handle toggles between
@@ -497,6 +503,7 @@ onAddToCart(item)
       <SearchWithTopOfShift
         value={searchQuery}
         onChange={setSearchQuery}
+        onFocusChange={setSearchFocused}
         shiftId={currentShift?.id ?? null}
         items={menuItems}
         categoryById={categoryById}
@@ -556,6 +563,7 @@ onAddToCart(item)
               selectedId={selectedCategoryId}
               items={activeItems}
               onSelect={onSelectCategory}
+              bottomInset={200}
               emptyText="В этой категории пока нет позиций"
               renderItem={(item) => (
             <MenuPickRow
@@ -579,13 +587,13 @@ onAddToCart(item)
           transient mode and the cart's default (collapsed) view is
           exactly what the user wants when they return. */}
       <BottomSheet
-        ref={cartSheetRef}
-        visible={!isSearching}
-        snapPoints={snapPoints}
-        initialSnap={0}
-        header={cartHeader}
-        footer={cartFooter}
-      >
+          ref={cartSheetRef}
+          visible={!searchActive}
+          snapPoints={snapPoints}
+          initialSnap={0}
+          header={cartHeader}
+          footer={cartFooter}
+        >
         <CartContent
           items={draftItems}
           contextItems={contextItems}

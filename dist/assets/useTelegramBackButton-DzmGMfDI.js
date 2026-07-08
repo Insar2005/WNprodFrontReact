@@ -1,0 +1,1 @@
+import{a as e,n as t}from"./jsx-runtime-n5LQ9ujS.js";import{l as n}from"./telegram-FbHSjdnI.js";var r=e(t(),1);function i(e,{enabled:t=!0}={}){let i=(0,r.useRef)(e);(0,r.useEffect)(()=>{i.current=e}),(0,r.useEffect)(()=>{if(t)return n(()=>{i.current?.()})},[t])}export{i as t};

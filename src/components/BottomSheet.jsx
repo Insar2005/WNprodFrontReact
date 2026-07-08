@@ -52,13 +52,23 @@ function BottomSheetInner(
     onClose?.()
   }
 
-  const sheetClass = [
-    'bs-sheet',
-    sheet.isDragging ? 'bs-sheet--dragging' : '',
-    sheet.isAnimating ? 'bs-sheet--animating' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
+  // Top-snap detection: the last (highest) snap point is the "fullscreen"
+// position of the sheet. In fullscreen Telegram mode we need to push the
+// handle + header below the ~90px Telegram overlay area, but only when
+// the sheet is actually at that top snap — otherwise the collapsed
+// sheet gains ugly whitespace at its top. CSS handles the actual
+// padding via .bs-sheet--top-snap; here we just emit the class.
+const topSnapIdx = resolvedSnaps.length - 1
+const isTopSnap = sheet.currentSnapIdx === topSnapIdx
+
+const sheetClass = [
+  'bs-sheet',
+  sheet.isDragging ? 'bs-sheet--dragging' : '',
+  sheet.isAnimating ? 'bs-sheet--animating' : '',
+  isTopSnap ? 'bs-sheet--top-snap' : '',
+]
+  .filter(Boolean)
+  .join(' ')
 
   return (
     <div className="bs-overlay" onClick={onBackdropClick}>

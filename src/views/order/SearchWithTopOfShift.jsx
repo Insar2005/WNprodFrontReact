@@ -13,21 +13,24 @@ import { useRef, useState } from 'react'
  *   • "×" (clear) — shown when the field has text; wipes the query.
  *   • "Скрыть" — shown when the input has focus (keyboard is docked on
  *     mobile); blurs the input which lets Telegram/iOS dismiss the
- *     keyboard. Waiters in the field couldn't figure out how to get the
- *     keyboard down otherwise — the Telegram WebApp header doesn't
- *     provide a "Done" affordance.
+ *     keyboard.
  *
- * Props (unchanged from the old signature so callers don't need edits):
- *   value        — current query (controlled)
- *   onChange     — (string) => void
+ * Props:
+ *   value          — current query (controlled)
+ *   onChange       — (string) => void
+ *   onFocusChange  — (boolean) => void, notified on focus/blur so the
+ *                    parent can hide overlays that shouldn't be in the
+ *                    way of the keyboard (cart sheet, submit button).
+ *                    Optional — pass null to opt out.
+ *   placeholder    — placeholder text
  *   shiftId, items, categoryById, onPick — no longer used; kept for
- *                  API compatibility. Removing them from the caller
- *                  is fine, but leaving them in place is harmless.
- *   placeholder  — placeholder text
+ *                    API compatibility. Removing them from the caller
+ *                    is fine, but leaving them in place is harmless.
  */
 export default function SearchWithTopOfShift({
   value,
   onChange,
+  onFocusChange = null,
   placeholder = 'Поиск по меню…',
   // Kept to match the previous prop signature — see note above.
   // eslint-disable-next-line no-unused-vars
@@ -42,12 +45,17 @@ export default function SearchWithTopOfShift({
   const [focused, setFocused] = useState(false)
   const inputRef = useRef(null)
 
+  const setFocusState = (next) => {
+    setFocused(next)
+    onFocusChange?.(next)
+  }
+
   const hideKeyboard = () => {
     // Blurring the input is what actually dismisses the mobile keyboard
     // in Telegram WebApp. We also flip focused=false ourselves so the
     // "Скрыть" button hides immediately (before the browser's blur
     // event lands) — feels snappier.
-    setFocused(false)
+    setFocusState(false)
     inputRef.current?.blur()
   }
 
@@ -60,8 +68,8 @@ export default function SearchWithTopOfShift({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={() => setFocusState(true)}
+        onBlur={() => setFocusState(false)}
         // Hint to mobile keyboards: search action, no autocorrect UI.
         inputMode="search"
         enterKeyHint="search"

@@ -11,6 +11,7 @@ import HallEditorCanvas from './HallEditorCanvas'
 import HallFormModal from './HallFormModal'
 import TableEditPanel from './TableEditPanel'
 import HallLayoutsPanel from './HallLayoutsPanel'
+import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
 
 /**
  * Hall editor. (Was HallEditorView.vue.)
@@ -76,7 +77,9 @@ export default function HallEditorView() {
   const goBack = () => {
     if (window.history.length > 1) navigate(-1)
     else navigate('/map')
+  
   }
+  useTelegramBackButton(goBack)
   const goToImport = () => navigate('/import')
 
   // === Hall form ===
@@ -359,9 +362,9 @@ export default function HallEditorView() {
   return (
     <div className="ed-page">
       <header className="ed-topbar">
-        <button className="back-btn" onClick={goBack} aria-label="Назад">
+        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
           ←
-        </button>
+        </button> */}
         <h1 className="ed-title">Карта столов</h1>
         <div className="ed-topbar-actions">
           <button className="ed-icon-btn" onClick={goToImport} title="Импортировать">
