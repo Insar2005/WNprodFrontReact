@@ -506,7 +506,27 @@ export const useOrderStore = create((set, get) => ({
       })
     }
   },
-
+/**
+   * Decrement a menu item for a SPECIFIC guest, by (menu_item_id, guest).
+   * Used by the pick-row slide-out "−" flag, which knows the dish and the
+   * active guest but not a particular cart-line id. If several lines match
+   * (same dish, same guest, different comments), we decrement the LAST one
+   * added — mirrors how tapping the row adds to that same bucket. Removes
+   * the line when it hits zero.
+   */
+  decDraftItemForGuest: (menuItemId, guest = 1) => {
+    const d = get().draft
+    if (!d) return
+    // Find the last matching line (same dish + guest).
+    let targetId = null
+    for (const i of d.items) {
+      if (i.menu_item_id === menuItemId && (i.guest || 1) === guest) {
+        targetId = i.id
+      }
+    }
+    if (!targetId) return
+    get().decDraftItem(targetId)
+  },
   removeDraftItem: (itemId) => {
     const d = get().draft
     if (!d) return

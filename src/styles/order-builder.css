@@ -14,9 +14,11 @@
   min-height: 0;
 }
 
-/* Optional inset from the left edge — visual only. */
+/* Рельса вплотную к левому краю экрана (proto). .mtp-wrap наследует
+   margin: 0 -16px из global — внутри непадженного .ob-page это дало бы
+   выпадание за края, поэтому обнуляем. */
 .ob-page .mtp-wrap {
-  margin-left: 12px;
+  margin: 0;
 }
 
 /* Search results list also scrolls within the bounded page. */
@@ -24,21 +26,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding: 0 14px 24px;
 }
 
 
-/* GuestBar wrapper — sits above the items/rail layout, not inside the
-   sheet handle. Has its own horizontal padding and a bottom rule so it
-   reads as a distinct band. */
-.ob-guest-bar-wrap {
-  flex-shrink: 0;
-  padding: 4px 16px 6px;
-  border-bottom: 1px solid var(--wn-glass-border-subtle);
-  background: var(--wn-bg);
-}
-.ob-guest-bar-wrap .gb-scroll {
-  padding: 4px 0;
-}
+/* GuestBar рендерится без обёртки: паддинг 8px 14px и нижняя линия
+   заданы прямо на .gb-scroll (order-guests.css, по прототипу). */
 
 
 /* ── FULLSCREEN safe-area ─────────────────────────────────────────

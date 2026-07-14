@@ -1,6 +1,8 @@
 /* Guest selection (dialog) + guest switcher bar + per-guest cart groups. */
 
-/* ── "How many guests?" dialog ── */
+/* ── «Сколько гостей?» — диалог.
+   ⚠️ Июль 2026: в OrderBuilder не используется (редизайн menu-redesign,
+   гости управляются только GuestBar). Стили оставлены для отката. ── */
 .gcd-overlay {
   position: fixed;
   inset: 0;
@@ -66,7 +68,7 @@
 }
 .gcd-num:active {
   transform: scale(0.95);
-  background: var(--wn-accent-bg);
+  background: var(--wn-accent-fill);
 }
 .gcd-hint {
   margin: 14px 0 0;
@@ -74,7 +76,11 @@
   color: var(--wn-ink-faint);
 }
 
-/* ── Guest switcher bar (above items) ── */
+/* ==========================================================================
+   GuestBar — 1:1 proto-guests.jsx GuestBar.
+   Чип = контейнер (кнопка-лейбл + «×»); активный — accent-fill с
+   полупрозрачной акцентной рамкой; «＋» — круглая dashed-кнопка 36px.
+   ========================================================================== */
 .gb-scroll {
   display: flex;
   align-items: center;
@@ -82,7 +88,9 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding: 2px 2px 6px;
+  padding: 8px 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--wn-glass-border-subtle);
 }
 .gb-scroll::-webkit-scrollbar {
   display: none;
@@ -91,32 +99,38 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  background: var(--wn-bg-recessed);
-  border: 1px solid transparent;
   border-radius: 999px;
-  overflow: hidden;
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
 }
 .gb-chip--on {
-  background: var(--wn-accent-bg);
-  border-color: var(--wn-accent);
+  background: var(--wn-accent-fill);
+  border-color: color-mix(in srgb, var(--wn-accent) 30%, transparent);
 }
 .gb-chip-label {
   -webkit-appearance: none;
   appearance: none;
-  border: none;
-  background: none;
-  color: var(--wn-ink-soft);
-  font-size: 14px;
-  font-weight: 600;
-  padding: 8px 12px;
-  cursor: pointer;
-  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 8px 4px 8px 13px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Одиночный чип «Один чек» — без «×», симметричные отступы. */
+.gb-chip--single .gb-chip-label {
+  padding: 8px 14px;
 }
 .gb-chip--on .gb-chip-label {
-  color: var(--wn-accent-ink);
+  font-weight: 600;
+  color: var(--wn-accent-text);
 }
 .gb-chip-badge {
   display: inline-flex;
@@ -125,22 +139,33 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 9px;
-  background: var(--wn-accent);
-  color: #fff;
+  border-radius: 999px;
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink-mute);
   font-size: 11px;
   font-weight: 700;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+.gb-chip--on .gb-chip-badge {
+  background: var(--wn-accent);
+  color: #fff;
 }
 .gb-chip-x {
   -webkit-appearance: none;
   appearance: none;
   border: none;
   background: none;
-  color: var(--wn-ink-mute);
+  color: var(--wn-ink-faint);
   font-size: 18px;
   line-height: 1;
   padding: 0 10px 0 2px;
   cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.gb-chip--on .gb-chip-x {
+  color: var(--wn-accent-text);
 }
 .gb-add {
   flex: 0 0 auto;
@@ -148,16 +173,18 @@
   appearance: none;
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: 999px;
   border: 1px dashed var(--wn-glass-border);
-  background: var(--wn-bg-elevated);
-  color: var(--wn-accent-ink);
+  background: transparent;
+  color: var(--wn-ink-soft);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Per-guest groups in the cart — each guest is a distinct card ── */
+/* ── Per-guest groups (OrderDetailsSheet — история/детали заказа) ── */
 .cc-guest-group {
   background: var(--wn-bg-elevated);
   border: 1px solid var(--wn-glass-border-subtle);
@@ -173,7 +200,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 11px 14px;
-  background: var(--wn-accent-bg);
+  background: var(--wn-accent-fill);
   border-bottom: 1px solid var(--wn-glass-border-subtle);
 }
 .cc-guest-name {
@@ -182,7 +209,7 @@
   gap: 9px;
   font-size: 15px;
   font-weight: 700;
-  color: var(--wn-accent-ink);
+  color: var(--wn-accent-text);
 }
 .cc-guest-badge {
   display: inline-flex;
@@ -199,7 +226,7 @@
 .cc-guest-subtotal {
   font-size: 15px;
   font-weight: 700;
-  color: var(--wn-accent-ink);
+  color: var(--wn-accent-text);
 }
 /* Items sit inside the card with their own padding. */
 .cc-guest-group .cc-items,
@@ -211,26 +238,6 @@
   font-size: 13px;
   padding: 12px 14px;
 }
-/* Grand total — a bold standalone bar. */
-.cc-grand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 4px;
-  padding: 14px 16px;
-  background: var(--wn-bg-recessed);
-  border-radius: 16px;
-}
-.cc-grand-label {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--wn-ink);
-}
-.cc-grand-total {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--wn-ink);
-}
 
 /* Read-only "already in order" items shown as context when adding positions. */
 .cc-item--ctx {
@@ -241,5 +248,5 @@
   color: var(--wn-ink-soft);
 }
 .cc-item--ctx .cc-item-unit {
-  color: var(--wn-accent-ink);
+  color: var(--wn-accent-text);
 }

@@ -1,143 +1,198 @@
-import { useEffect, useRef, useState } from 'react'
-import { useUiStore } from '@/stores/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  clearDiagLog,
+  envSnapshot,
+  getDiagLog,
+  onDiagChange,
+  probeBackend,
+} from '@/utils/diagnostics'
 
 /**
- * Text-input modal, promise-based (ui.prompt(...) resolves with the string
- * or null on cancel). Anchored near the top so the on-screen keyboard never
- * covers it — that's the whole reason it exists instead of inline inputs.
+ * Diagnostics bottom-sheet. Shows the in-memory log buffer + environment
+ * snapshot + quick actions (probe backend, copy log to clipboard, clear).
+ *
+ * Mount is gated by App.jsx on `ui.diagnosticsOpen` — this component just
+ * paints the sheet and calls `onClose` when the user closes it.
  *
  * ── Vue → React notes ───────────────────────────────────────────────
- * - In Vue this was two files: PromptHost.vue (reads the store) +
- *   PromptModal.vue (the dumb modal). Merged here — there's only ever one
- *   host, so a separate reusable modal added no value.
- * - v-model → controlled input (value in useState).
- * - The Vue watch(visible) reset value + autofocused on each open. The
- *   React-idiomatic way to "reset state when identity changes" is the
- *   `key` prop: PromptHost reads the store and renders <PromptModalInner
- *   key={...}> — a fresh dialog gives a new key, so the inner component
- *   REMOUNTS, and its useState(initial) seeds the value naturally. No
- *   setState-in-effect needed (which the newer react-hooks lint flags).
- *   The effect that remains only does focus — a real side effect.
- * - inputRef → useRef. Enter confirms (single-line), Esc cancels.
+ * - Log list is external state (module buffer in utils/diagnostics.js) —
+ *   we subscribe via onDiagChange in a useEffect. Initial sync inside the
+ *   effect uses the scoped set-state-in-effect disable that other stores
+ *   in this project use for external-source syncs.
+ * - envSnapshot() is a one-off read, so useMemo([]).
+ * - "Скопировано" flash → useState + setTimeout with cleanup ref.
+ * - Clipboard: navigator.clipboard first; fallback to a hidden textarea
+ *   + execCommand for older Telegram WebViews where the async API is
+ *   gated behind a user gesture that pointerdown-inside-sheet may miss.
  * ─────────────────────────────────────────────────────────────────────
  */
-export default function PromptHost() {
-  const dialog = useUiStore((s) => s.promptDialog)
-  const resolvePrompt = useUiStore((s) => s.resolvePrompt)
+export default function DiagnosticsPanel({ onClose }) {
+  const [entries, setEntries] = useState(() => getDiagLog())
+  const [probing, setProbing] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef(0)
 
-  if (!dialog) return null
+  const env = useMemo(() => envSnapshot(), [])
 
-  // Key on the per-open token set by ui.prompt(). A fresh prompt → new
-  // token → PromptModalInner remounts → its useState(initial) reseeds.
-  return (
-    <PromptModalInner
-      key={dialog._token}
-      dialog={dialog}
-      onConfirm={(v) => resolvePrompt(v)}
-      onCancel={() => resolvePrompt(null)}
-    />
-  )
-}
-
-function PromptModalInner({ dialog, onConfirm, onCancel }) {
-  const {
-    title = 'Введите значение',
-    initial = '',
-    placeholder = '',
-    multiline = false,
-    rows = 4,
-    inputType = 'text',
-    inputMode = 'text',
-    maxLength = 2000,
-    confirmText = 'Сохранить',
-    cancelText = 'Отмена',
-    required = false,
-  } = dialog
-
-  // Seeded once on mount — remount (new key) reseeds. No effect needed.
-  const [value, setValue] = useState(initial)
-  const inputRef = useRef(null)
-
-  // Focus on mount. Two rAFs: iOS sometimes ignores the first focus.
   useEffect(() => {
-    let r2 = 0
-    const r1 = requestAnimationFrame(() => {
-      inputRef.current?.focus()
-      r2 = requestAnimationFrame(() => inputRef.current?.focus())
-    })
+    // External source: entries may have been logged between the useState
+    // initializer and this effect committing. Sync once, then subscribe.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEntries(getDiagLog())
+    return onDiagChange(setEntries)
+  }, [])
+
+  useEffect(() => {
     return () => {
-      cancelAnimationFrame(r1)
-      if (r2) cancelAnimationFrame(r2)
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current)
+      }
     }
   }, [])
 
-  const canConfirm = !required || (value || '').trim().length > 0
-
-  const confirm = () => {
-    if (!canConfirm) return
-    onConfirm(value)
-  }
-
-  const onOverlayClick = (e) => {
-    if (e.target === e.currentTarget) onCancel()
-  }
-
-  const onKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      onCancel()
-    } else if (e.key === 'Enter' && !multiline) {
-      e.preventDefault()
-      confirm()
+  const onProbe = async () => {
+    if (probing) return
+    setProbing(true)
+    try {
+      await probeBackend()
+    } finally {
+      setProbing(false)
     }
   }
 
+  const onCopy = async () => {
+    const report = buildReport(env, entries)
+    const ok = await copyToClipboard(report)
+    if (!ok) return
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1500)
+  }
+
+  const onClear = () => {
+    clearDiagLog()
+  }
+
+  const onOverlayClick = (e) => {
+    if (e.target === e.currentTarget) onClose?.()
+  }
+
   return (
-    <div className="prompt-overlay" onClick={onOverlayClick}>
-      <div className="prompt-modal wn-prompt-in" role="dialog" aria-modal="true">
-        <header className="prompt-header">
-          <h3 className="prompt-title">{title}</h3>
-          <button className="prompt-close" onClick={onCancel} aria-label="Закрыть">
+    <div className="diag-overlay" onClick={onOverlayClick}>
+      <div className="diag-panel" role="dialog" aria-modal="true">
+        <header className="diag-header">
+          <span className="diag-title">Диагностика</span>
+          <button
+            className="diag-x"
+            type="button"
+            onClick={() => onClose?.()}
+            aria-label="Закрыть"
+          >
             ×
           </button>
         </header>
 
-        <div className="prompt-body">
-          {multiline ? (
-            <textarea
-              ref={inputRef}
-              className="prompt-input prompt-input--multiline"
-              placeholder={placeholder}
-              maxLength={maxLength}
-              rows={rows}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={onKeyDown}
-            />
-          ) : (
-            <input
-              ref={inputRef}
-              className="prompt-input"
-              type={inputType}
-              placeholder={placeholder}
-              maxLength={maxLength}
-              inputMode={inputMode}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={onKeyDown}
-            />
-          )}
+        <div className="diag-actions">
+          <button
+            className="diag-btn"
+            type="button"
+            disabled={probing}
+            onClick={onProbe}
+          >
+            {probing ? 'Проверяю…' : 'Проверить бэкенд'}
+          </button>
+          <button
+            className="diag-btn diag-btn--ghost"
+            type="button"
+            onClick={onCopy}
+          >
+            Скопировать
+          </button>
+          <button
+            className="diag-btn diag-btn--ghost"
+            type="button"
+            onClick={onClear}
+          >
+            Очистить
+          </button>
         </div>
 
-        <footer className="prompt-footer">
-          <button className="btn btn--ghost" onClick={onCancel}>
-            {cancelText}
-          </button>
-          <button className="btn btn--primary" disabled={!canConfirm} onClick={confirm}>
-            {confirmText}
-          </button>
-        </footer>
+        {copied && <div className="diag-copied">Скопировано</div>}
+
+        <div className="diag-env">
+          {Object.entries(env).map(([k, v]) => (
+            <div className="diag-env-row" key={k}>
+              <span className="diag-env-k">{k}</span>
+              <span className="diag-env-v">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="diag-log">
+          {entries.length === 0 ? (
+            <div className="diag-empty">Записей пока нет</div>
+          ) : (
+            entries.map((e, i) => (
+              <div key={i} className={`diag-line diag-line--${e.level}`}>
+                <span className="diag-time">{formatTime(e.t)}</span>
+                {e.message}
+                {e.extra && <span className="diag-extra">{e.extra}</span>}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    // Fallback below for older Telegram WebViews where the async API is
+    // gated or unavailable.
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    ta.setAttribute('readonly', '')
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+function formatTime(iso) {
+  try {
+    const d = new Date(iso)
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    const ss = String(d.getSeconds()).padStart(2, '0')
+    return `${hh}:${mm}:${ss}`
+  } catch {
+    return iso
+  }
+}
+
+function buildReport(env, entries) {
+  const lines = []
+  lines.push('=== Waiter Note diagnostics ===')
+  lines.push('')
+  lines.push('-- env --')
+  for (const [k, v] of Object.entries(env)) lines.push(`${k}: ${v}`)
+  lines.push('')
+  lines.push(`-- log (${entries.length}) --`)
+  for (const e of entries) {
+    lines.push(`[${e.t}] ${e.level.toUpperCase()} ${e.message}`)
+    if (e.extra) lines.push(`  ${e.extra}`)
+  }
+  return lines.join('\n')
 }

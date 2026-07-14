@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMenuStore } from '@/stores/menu'
 import { useOrderStore } from '@/stores/order'
@@ -6,47 +6,45 @@ import { useHallStore } from '@/stores/hall'
 import { useWorkplaceStore } from '@/stores/workplace'
 import { useShiftStore } from '@/stores/shift'
 import { useUiStore } from '@/stores/ui'
-import { formatMoney } from '@/utils/format'
 import { hapticImpact } from '@/utils/telegram'
-import BottomSheet from '@/components/BottomSheet'
-import MenuTwoPanel from '@/views/menu/MenuTwoPanel'
+import { pluralize } from '@/utils/pluralize'
+import { buildTree, nodeByPath, labelsForPath } from '@/utils/menuTree'
 import MenuPickRow from './MenuPickRow'
 import SearchWithTopOfShift from './SearchWithTopOfShift'
 import { matchesMenuQuery } from '@/utils/menuSearch'
 import CartContent from './CartContent'
-import TablePickerSheet from './TablePickerSheet'
-import { GuestCountDialog, GuestBar } from './OrderGuests'
+import CartSheet from './CartSheet'
+import CollectSheet from './CollectSheet'
+import CommentModal from './CommentModal'
+import ItemViewModal from './ItemViewModal'
+import { GuestBar } from './OrderGuests'
+import Breadcrumbs from '@/components/menu/Breadcrumbs'
+import SubCell from '@/components/menu/SubCell'
+import { SectionLabel } from '@/components/menu/SectionBits'
 import '@/styles/order-builder.css'
+import '@/styles/menu-tree.css'
 import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
-function pluralize(n, forms) {
-  const a = Math.abs(n) % 100
-  const b = a % 10
-  if (a > 10 && a < 20) return forms[2]
-  if (b > 1 && b < 5) return forms[1]
-  if (b === 1) return forms[0]
-  return forms[2]
-}
 
 /**
- * Order builder. (Was OrderBuilderView.vue.)
+ * Сборка заказа — 1:1 по menu-redesign (proto-screens.jsx OrderBuilder).
  *
- * Recent changes (July 2026):
- *   • Cart BottomSheet is HIDDEN during search mode (searchQuery !== '')
- *     — the sheet used to sit at the bottom of the screen and its
- *     overlay area (empty margins to the left and right of the small
- *     summary text) accidentally passed clicks up to the search input,
- *     which re-opened the keyboard. Rendering the sheet with
- *     visible={false} while searching removes it from the tree
- *     entirely, eliminating that whole overlay layer.
- *   • Search dropdown "Top of shift" removed at customer's request —
- *     see SearchWithTopOfShift for details.
- *   • Search results tap = navigate to category + clear query + add
- *     to cart, all in one action. (No longer just "navigate to folder".)
- *   • Guests bar stays above menu content in every mode.
+ * Июль 2026, вторая итерация («точь-в-точь»):
+ *   • Шапка = proto TopBar: заголовок 17/600 + подзаголовок 12 mute,
+ *     справа пилюля «Очистить» (danger) при непустой корзине.
+ *   • Диалога «Сколько гостей?» больше НЕТ — число гостей задаётся
+ *     только GuestBar («＋» добавляет, «×» удаляет), как в прототипе.
+ *   • ⓘ на карточке открывает ItemViewModal (read-only + «Добавить в
+ *     заказ»), а НЕ комментарий. Комментарии — только из строк корзины.
+ *   • Карточка позиции без заливки при qty>0: бейдж у названия +
+ *     выезжающий «−» (см. MenuItemRow).
+ *   • Корзина — НЕ draggable: обычный блок внизу (CartSheet), тап по
+ *     полосе «Заказ» раскрывает до 60vh. Стол и комментарий к заказу
+ *     вынесены в CollectSheet («Оформление заказа») по кнопке «Собрать».
  *
- * Previous notes on the Vue → React port are still accurate; the URL
- * modes (?table_id, ?edit_paid, ?add_to_order), draft derivation,
- * mount effect and cart-sheet ref all work the same as before.
+ * Не тронуто (не регрессировать): три URL-режима (?table_id /
+ * ?edit_paid / ?add_to_order), посев черновика на маунте, удаление
+ * гостя с перенумерацией и confirm, highlight из поиска, выбор стола,
+ * комментарий к заказу, скрытие шита при поиске.
  */
 export default function OrderBuilderView() {
   const navigate = useNavigate()
@@ -56,75 +54,81 @@ export default function OrderBuilderView() {
   const orders = useOrderStore((s) => s.orders)
   const menuItems = useMenuStore((s) => s.items)
   const menuCategories = useMenuStore((s) => s.categories)
-  const selectedCategoryId = useMenuStore((s) => s.selectedCategoryId)
-// Which item is currently pulsing after a search-result pick.
-// Auto-clears in the store after ~2s.
+  const path = useMenuStore((s) => s.path)
   const highlightedItemId = useMenuStore((s) => s.highlightedItemId)
   const currency = useWorkplaceStore((s) => s.current()?.currency ?? 'RUB')
   const currentId = useWorkplaceStore((s) => s.currentId)
-  // currentShift is still selected because SearchWithTopOfShift props
-  // include a shiftId slot (kept for API compatibility with the older
-  // "top of shift" iteration). Harmless to leave subscribed.
-  const currentShift = useShiftStore((s) => s.current)
+  const currentTitle = useWorkplaceStore((s) => s.current()?.title ?? '')
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [tablePickerVisible, setTablePickerVisible] = useState(false)
   const [contextTableNum, setContextTableNum] = useState(null)
   const [selectedGuest, setSelectedGuest] = useState(1)
-  const [guestDialogOpen, setGuestDialogOpen] = useState(false)
-  const cartSheetRef = useRef(null)
+  const [commentTarget, setCommentTarget] = useState(null)
+  const [viewItem, setViewItem] = useState(null) // ⓘ → ItemViewModal
+  const [cartExpanded, setCartExpanded] = useState(false)
+  const [collectOpen, setCollectOpen] = useState(false) // «Оформление заказа»
 
-  // Show search-results panel only when there's actually a query.
   const isSearching = searchQuery.trim() !== ''
-
-  // Hide the cart sheet + submit button whenever the search input has
-  // focus OR has content. Empty-focus counts too: when the keyboard is
-  // open (even before the waiter types), the sheet used to peek out
-  // above it and its "Собрать заказ" footer sat on top of the keyboard,
-  // confusing which was the right thing to tap.
   const searchActive = isSearching || searchFocused
 
-  // Two snap points only: collapsed (~180px shows summary + table plate)
-  // and expanded (92% of viewport). Tap on the handle toggles between
-  // them; drag works as usual.
-  const snapPoints = useMemo(() => [180, 0.92], [])
-
   const [editingPaidId] = useState(() => searchParams.get('edit_paid') || null)
-  const [addingToOrderId] = useState(() => searchParams.get('add_to_order') || null)
+  const [addingToOrderId] = useState(
+    () => searchParams.get('add_to_order') || null,
+  )
 
-  // === Derived menu lists ===
-  const allCategories = menuCategories
-  const activeCategories = useMemo(
+  // === Дерево ===
+  // Только активные категории/позиции. buildTree сохраняет position.
+  const activeCats = useMemo(
     () => menuCategories.filter((c) => c.is_active),
     [menuCategories],
   )
-  const activeItems = useMemo(() => {
-    if (!selectedCategoryId) return []
-    return menuItems.filter((i) => i.category_id === selectedCategoryId && i.is_active)
-  }, [menuItems, selectedCategoryId])
+  const activeItemsAll = useMemo(
+    () => menuItems.filter((i) => i.is_active),
+    [menuItems],
+  )
+  const roots = useMemo(
+    () => buildTree(activeCats, activeItemsAll),
+    [activeCats, activeItemsAll],
+  )
+  const currentNode = useMemo(
+    () => nodeByPath(roots, path) || roots[0] || null,
+    [roots, path],
+  )
+  const labels = useMemo(() => labelsForPath(roots, path), [roots, path])
+  const subcats = currentNode?.children ?? []
+  const looseItems = currentNode?.items ?? []
 
-  // Quick lookup: category by id → used to build breadcrumb labels
-  // ("Завтраки") under search-result rows.
   const categoryById = useMemo(() => {
     const m = {}
     for (const c of menuCategories) m[c.id] = c
     return m
   }, [menuCategories])
 
-  // Prefix-per-word match: query "га" hits "Гамбургер" (word start)
-// but not "Мангале" (mid-word). See utils/menuSearch for the exact
-// rule.
-const searchResults = useMemo(() => {
-const q = (searchQuery || '').trim()
-if (!q) return []
-return menuItems
-.filter((i) => i.is_active && matchesMenuQuery(i.title, q))
-.sort((a, b) => a.title.localeCompare(b.title))
-}, [menuItems, searchQuery])
+  // Полный путь категории «Родитель › Дитя» для результатов поиска и
+  // карточки позиции (в прототипе показывается весь путь).
+  const fullPathLabel = (categoryId) => {
+    const parts = []
+    let cur = categoryById[categoryId]
+    let guard = 0
+    while (cur && guard < 100) {
+      parts.unshift(cur.title)
+      cur = cur.parent_id ? categoryById[cur.parent_id] : null
+      guard += 1
+    }
+    return parts.join(' › ') || null
+  }
 
-  // === Derived draft values ===
+  const searchResults = useMemo(() => {
+    const q = (searchQuery || '').trim()
+    if (!q) return []
+    return menuItems
+      .filter((i) => i.is_active && matchesMenuQuery(i.title, q))
+      .sort((a, b) => a.title.localeCompare(b.title))
+  }, [menuItems, searchQuery])
+
+  // === Производные от черновика ===
   const draftItems = useMemo(() => draft?.items || [], [draft?.items])
   const draftIsEmpty = draftItems.length === 0
   const draftItemCount = useMemo(
@@ -145,7 +149,9 @@ return menuItems
 
   const qtyOf = (menuItemId) =>
     draftItems
-      .filter((i) => i.menu_item_id === menuItemId && (i.guest || 1) === activeGuest)
+      .filter(
+        (i) => i.menu_item_id === menuItemId && (i.guest || 1) === activeGuest,
+      )
       .reduce((sum, i) => sum + i.quantity, 0)
 
   const guestCounts = useMemo(() => {
@@ -161,7 +167,8 @@ return menuItems
   const hallList = useHallStore((s) => s.halls)
   const draftTableId = draft?.tableId || null
   const selectedTable = useMemo(
-    () => (draftTableId ? hallTables.find((t) => t.id === draftTableId) ?? null : null),
+    () =>
+      draftTableId ? hallTables.find((t) => t.id === draftTableId) ?? null : null,
     [draftTableId, hallTables],
   )
   const selectedHall = useMemo(
@@ -174,6 +181,9 @@ return menuItems
 
   const canSubmit = !draftIsEmpty
 
+  // === Маунт: guard смены + посев черновика ===
+  // Диалог количества гостей убран (прототип): черновик стартует с
+  // одним гостем («Один чек»), дальше — только через GuestBar.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const order = useOrderStore.getState()
@@ -222,63 +232,56 @@ return menuItems
       const tid = t?.id || null
       if (!d || d.tableId !== tid) {
         order.startDraft({ tableId: tid, hallId: t?.hall_id || null })
-        setGuestDialogOpen(true)
       }
     } else if (!d || !draftHasItems) {
       order.startDraft()
-      setGuestDialogOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Автовыбор первой корневой категории после загрузки меню.
   useEffect(() => {
-    if (allCategories.length > 0 && !selectedCategoryId) {
-      const first = activeCategories[0]?.id || allCategories[0]?.id
-      if (first) useMenuStore.getState().selectCategory(first)
+    if (roots.length > 0 && path.length === 0) {
+      useMenuStore.getState().setPath([roots[0].id])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allCategories.length])
+  }, [roots.length])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // === Actions ===
+  // === Действия ===
   const onAddToCart = (item) => {
     useOrderStore.getState().addToDraft(item, { guest: activeGuest })
     hapticImpact('light')
   }
 
-  /**
-   * Tap on a search-result row: navigate to the item's category, close
-   * search, add to cart. The customer complained that tapping a result
-   * only "navigated to the folder" without adding — this handler makes
-   * both happen in one gesture.
-   *
-   * The order matters: we blur first (so the keyboard drops), then
-   * clear the query (which flips `isSearching` and unhides the cart
-   * sheet), then select the item's category (so if the user later opens
-   * search-empty they land on the right menu page), then add.
-   */
+  // Выезжающий «−»: убавить блюдо активному гостю.
+  const onDecItem = (item) => {
+    useOrderStore.getState().decDraftItemForGuest(item.id, activeGuest)
+    hapticImpact('light')
+  }
+
   const onPickFromSearch = (item) => {
-if (typeof document !== 'undefined' && document.activeElement?.blur) {
-document.activeElement.blur()
-}
-setSearchQuery('')
-// selectCategory clears any prior highlight (see store), so call it
-// FIRST, then set the fresh highlight for this picked item. Order
-// matters — flipping these two lines would wipe the highlight we
-// just tried to set.
-useMenuStore.getState().selectCategory(item.category_id)
-useMenuStore.getState().highlightItem(item.id)
-onAddToCart(item)
-}
+    if (typeof document !== 'undefined' && document.activeElement?.blur) {
+      document.activeElement.blur()
+    }
+    setSearchQuery('')
+    // selectCategory разворачивает полный путь до (возможно вложенной)
+    // категории и сбрасывает прежний highlight; потом ставим новый.
+    useMenuStore.getState().selectCategory(item.category_id)
+    useMenuStore.getState().highlightItem(item.id)
+    onAddToCart(item)
+  }
 
   const onAddGuest = () => {
     useOrderStore.getState().addGuest()
-    setSelectedGuest((useOrderStore.getState().draft?.guestCount) || 1)
+    setSelectedGuest(useOrderStore.getState().draft?.guestCount || 1)
   }
 
   const onRemoveGuest = async (g) => {
     const order = useOrderStore.getState()
-    const hasItems = (order.draft?.items || []).some((i) => (i.guest || 1) === g)
+    const hasItems = (order.draft?.items || []).some(
+      (i) => (i.guest || 1) === g,
+    )
     const ok = await useUiStore.getState().confirm({
       title: `Удалить гостя ${g}?`,
       message: hasItems
@@ -314,13 +317,14 @@ onAddToCart(item)
           `Добавлено к заказу${updated.table_number ? ` · стол №${updated.table_number}` : ''}`,
         )
         if (updated.table_id) {
-          navigate(`/map?show_order=${encodeURIComponent(updated.id)}`, { replace: true })
+          navigate(`/map?show_order=${encodeURIComponent(updated.id)}`, {
+            replace: true,
+          })
         } else {
           navigate('/map', { replace: true })
         }
         return
       }
-
       if (editingPaidId) {
         const patch = {
           items: (order.draft?.items || []).map((i) => ({
@@ -341,46 +345,30 @@ onAddToCart(item)
         navigate('/order-history', { replace: true })
         return
       }
-
       const created = await order.submitDraft({ workplaceId: currentId })
       ui.toastSuccess(
         `Заказ принят${created.table_number ? ` · стол №${created.table_number}` : ''}`,
       )
       if (created.table_id) {
-        navigate(`/map?highlight_table=${encodeURIComponent(created.table_id)}`, {
-          replace: true,
-        })
+        navigate(
+          `/map?highlight_table=${encodeURIComponent(created.table_id)}`,
+          { replace: true },
+        )
       } else {
         navigate('/map', { replace: true })
       }
     } catch (e) {
-      ui.toastError(e.message)
+      useUiStore.getState().toastError(e.message)
     } finally {
       setSubmitting(false)
     }
   }
 
-  const editOrderComment = async () => {
-    const order = useOrderStore.getState()
-    const value = await useUiStore.getState().prompt({
-      title: 'Комментарий к заказу',
-      initial: order.draft?.comments || '',
-      placeholder: 'Например: гость справа, оплата картой',
-      multiline: true,
-      rows: 3,
-      maxLength: 2000,
-      confirmText: 'Сохранить',
-    })
-    if (value === null) return
-    order.setDraftComments(value.trim() || '')
-  }
-
   const onClearDraft = async () => {
     const order = useOrderStore.getState()
-    const ui = useUiStore.getState()
-    const ok = await ui.confirm({
+    const ok = await useUiStore.getState().confirm({
       title: 'Очистить корзину?',
-      message: 'Все добавленные позиции будут удалены.',
+      message: 'Все позиции и комментарии будут удалены.',
       confirmText: 'Очистить',
       danger: true,
     })
@@ -397,160 +385,174 @@ onAddToCart(item)
     }
   }
 
-  const onTableSelect = (tableId) => {
-    const order = useOrderStore.getState()
-    if (tableId == null) {
-      order.setDraftTable(null, null)
+  // Кнопка в футере корзины: новый заказ и правка закрытого идут через
+  // CollectSheet (стол/комментарий); добавление к существующему заказу —
+  // сразу сабмит (стол уже есть, комментарий в этом режиме API не шлёт).
+  const handlePrimary = () => {
+    if (!canSubmit || submitting) return
+    if (addingToOrderId) {
+      onSubmit()
     } else {
-      const t = useHallStore.getState().tableById(tableId)
-      if (t) order.setDraftTable(t.id, t.hall_id)
+      setCollectOpen(true)
     }
-    setTablePickerVisible(false)
   }
 
-  const expandCart = () => cartSheetRef.current?.snapTo(1)
+  // Подтверждение из CollectSheet: пишем стол/комментарий в черновик и
+  // отправляем. onSubmit читает store свежим getState(), так что патч
+  // уйдёт уже с этими значениями. При ошибке шит остаётся открытым.
+  const handleCollectConfirm = async ({ tableId, comment }) => {
+    const order = useOrderStore.getState()
+    if (!editingPaidId) {
+      if (tableId == null) {
+        order.setDraftTable(null, null)
+      } else {
+        const t = useHallStore.getState().tableById(tableId)
+        if (t) order.setDraftTable(t.id, t.hall_id)
+      }
+    }
+    order.setDraftComments(comment || '')
+    await onSubmit()
+    setCollectOpen(false)
+  }
   const goBack = () => {
     if (window.history.length > 1) navigate(-1)
     else navigate('/map')
   }
-  
   useTelegramBackButton(goBack)
   const goToMenuEditor = () => navigate('/menu')
 
+  // Навигация по дереву
   const onSelectCategory = (id) => {
     if (typeof document !== 'undefined' && document.activeElement?.blur) {
       document.activeElement.blur()
     }
-    useMenuStore.getState().selectCategory(id)
+    useMenuStore.getState().setPath([id])
+  }
+  const drillInto = (id) => useMenuStore.getState().drillInto(id)
+  const navBreadcrumb = (idx) => useMenuStore.getState().navToBreadcrumb(idx)
+
+  // ⓘ → ItemViewModal (read-only карточка + «Добавить в заказ»).
+  const openItemView = (menuItem) => setViewItem(menuItem)
+
+  // Комментарий — только из строки корзины (как в прототипе).
+  const openCommentFromCart = (lineItem) => {
+    // Достаём позицию меню ради её comment_chips.
+    const menuItem =
+      menuItems.find((m) => m.id === lineItem.menu_item_id) || {
+        title: lineItem.title,
+        comment_chips: [],
+      }
+    setCommentTarget({
+      item: { ...menuItem, title: menuItem.title || lineItem.title },
+      lineId: lineItem.id,
+    })
   }
 
+  const saveComment = (text) => {
+    const t = commentTarget
+    if (t?.lineId) {
+      useOrderStore.getState().updateDraftItem(t.lineId, {
+        comment: text || null,
+      })
+    }
+    setCommentTarget(null)
+  }
+
+  // === Тексты ===
   const title = editingPaidId
-    ? `Изменение заказа${contextTableNum ? ` · стол №${contextTableNum}` : ''}`
+    ? 'Изменение заказа'
     : addingToOrderId
-      ? `+ к заказу${contextTableNum ? ` · стол №${contextTableNum}` : ''}`
+      ? 'Добавление к заказу'
       : 'Новый заказ'
 
+  const subtitle = editingPaidId || addingToOrderId
+    ? contextTableNum
+      ? `Стол №${contextTableNum}`
+      : currentTitle
+    : selectedTable
+      ? `Стол №${selectedTable.number}${selectedHall ? ` · ${selectedHall.name}` : ''}`
+      : currentTitle
+
   const submitLabel = submitting
-    ? editingPaidId
-      ? 'Сохраняем…'
-      : addingToOrderId
-        ? 'Добавляем…'
-        : 'Создаём…'
+    ? '…'
     : editingPaidId
-      ? `Сохранить изменения · ${formatMoney(draftTotal, currency)}`
+      ? 'Сохранить'
       : addingToOrderId
-        ? `Добавить к заказу · ${formatMoney(draftTotal, currency)}`
-        : `Собрать заказ · ${formatMoney(draftTotal, currency)}`
+        ? 'Добавить'
+        : 'Собрать'
 
-  // === Cart sheet header + footer ===
-  const cartHeader = (
-    <>
-      <div className="ob-cart-header" onClick={expandCart}>
-        <div className="ob-cart-summary">
-          <span className="ob-cart-count">
-            {draftItemCount} {pluralize(draftItemCount, ['позиция', 'позиции', 'позиций'])}
-          </span>
-          <span className="ob-cart-total">{formatMoney(draftTotal, currency)}</span>
-        </div>
-      </div>
+  const cartEmpty = draftIsEmpty && contextItems.length === 0
 
-      {!editingPaidId && !addingToOrderId ? (
-        <button className="ob-table-plate" onClick={() => setTablePickerVisible(true)}>
-          <span className="ob-table-plate-icon">🪑</span>
-          {selectedTable ? (
-            <span className="ob-table-plate-text">
-              Стол №{selectedTable.number}
-              {selectedHall && <small> · {selectedHall.name}</small>}
-            </span>
-          ) : (
-            <span className="ob-table-plate-text ob-table-plate-text--empty">
-              Стол не выбран
-            </span>
-          )}
-          <span className="ob-table-plate-edit">✏️</span>
-        </button>
-      ) : (
-        contextTableNum && (
-          <div className="ob-table-plate ob-table-plate--readonly">
-            <span className="ob-table-plate-icon">🪑</span>
-            <span className="ob-table-plate-text">Стол №{contextTableNum}</span>
-          </div>
-        )
-      )}
-    </>
-  )
-
-  const cartFooter = (
-    <button className="ob-submit-btn" disabled={!canSubmit || submitting} onClick={onSubmit}>
-      {submitLabel}
-    </button>
-  )
+  const cartBarMeta = draftItemCount > 0
+    ? `${draftItemCount} ${pluralize(draftItemCount, ['позиция', 'позиции', 'позиций'])}${
+        guestCount > 1 ? ` · ${guestCount} ${pluralize(guestCount, ['гость', 'гостя', 'гостей'])}` : ''
+      }`
+    : 'Корзина пуста'
 
   return (
     <div className="ob-page">
-      <header className="ob-header">
-        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
-          ←
-        </button> */}
-        <h1 className="ob-title">{title}</h1>
+      <header className="wn-topbar ob-header">
+        <div className="wn-topbar-main">
+          <h1 className="wn-topbar-title">{title}</h1>
+          {subtitle && <div className="wn-topbar-sub">{subtitle}</div>}
+        </div>
         {!draftIsEmpty && !editingPaidId && (
-          <button className="ob-clear-btn" onClick={onClearDraft} aria-label="Очистить корзину">
+          <button
+            type="button"
+            className="wn-pill-btn wn-pill-btn--danger"
+            onClick={onClearDraft}
+            aria-label="Очистить корзину"
+          >
             Очистить
           </button>
         )}
       </header>
 
+      <GuestBar
+        guestCount={guestCount}
+        selected={activeGuest}
+        counts={guestCounts}
+        onSelect={setSelectedGuest}
+        onAdd={onAddGuest}
+        onRemove={onRemoveGuest}
+      />
+
       <SearchWithTopOfShift
         value={searchQuery}
         onChange={setSearchQuery}
         onFocusChange={setSearchFocused}
-        shiftId={currentShift?.id ?? null}
-        items={menuItems}
-        categoryById={categoryById}
-        onPick={onPickFromSearch}
       />
-
-      <div className="ob-guest-bar-wrap">
-        <GuestBar
-          guestCount={guestCount}
-          selected={activeGuest}
-          counts={guestCounts}
-          onSelect={setSelectedGuest}
-          onAdd={onAddGuest}
-          onRemove={onRemoveGuest}
-        />
-      </div>
 
       {isSearching ? (
         <section className="ob-search-results">
+          <SectionLabel>
+            {searchResults.length > 0
+              ? `Найдено: ${searchResults.length}`
+              : 'Ничего не найдено'}
+          </SectionLabel>
           {searchResults.length === 0 ? (
             <div className="ob-empty">
-              <p>Ничего не найдено</p>
+              <p>Попробуйте другой запрос.</p>
             </div>
           ) : (
-            <>
-              <p className="ob-search-count">Найдено: {searchResults.length}</p>
-              <div className="ob-items">
-                {searchResults.map((item) => {
-                  const cat = categoryById[item.category_id]
-                  return (
-                    <MenuPickRow
-                      key={item.id}
-                      item={item}
-                      currency={currency}
-                      quantity={qtyOf(item.id)}
-                      pathLabel={cat?.title ?? null}
-                      onAdd={onPickFromSearch}
-                    />
-                  )
-                })}
-              </div>
-            </>
+            <div className="ob-items">
+              {searchResults.map((item) => (
+                <MenuPickRow
+                  key={item.id}
+                  item={item}
+                  currency={currency}
+                  quantity={qtyOf(item.id)}
+                  pathLabel={fullPathLabel(item.category_id)}
+                  onAdd={onPickFromSearch}
+                  onInfo={openItemView}
+                />
+              ))}
+            </div>
           )}
         </section>
       ) : (
         <>
-          {activeCategories.length === 0 ? (
+          {roots.length === 0 ? (
             <div className="ob-empty ob-empty--centered">
               <p>В меню нет активных категорий.</p>
               <button className="btn-link" onClick={goToMenuEditor}>
@@ -558,95 +560,131 @@ onAddToCart(item)
               </button>
             </div>
           ) : (
-            <MenuTwoPanel
-              categories={activeCategories}
-              selectedId={selectedCategoryId}
-              items={activeItems}
-              onSelect={onSelectCategory}
-              bottomInset={200}
-              emptyText="В этой категории пока нет позиций"
-              renderItem={(item) => (
-            <MenuPickRow
-              key={item.id}
-              item={item}
-              currency={currency}
-              quantity={qtyOf(item.id)}
-              highlighted={item.id === highlightedItemId}
-              onAdd={onAddToCart}
-            />
-          )}
-            />
+            <div className="mtp-wrap">
+              {/* СЛЕВА — рельса корневых категорий */}
+              <nav className="mtp-rail" role="tablist" aria-label="Категории">
+                {roots.map((cat) => {
+                  const isActive = cat.id === path[0]
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      className={`mtp-cat${isActive ? ' mtp-cat--active' : ''}`}
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => onSelectCategory(cat.id)}
+                    >
+                      <span className="mtp-cat-text">{cat.title}</span>
+                    </button>
+                  )
+                })}
+              </nav>
+
+              {/* СПРАВА — содержимое текущего узла */}
+              <div className="mtp-pane" style={{ position: 'relative' }}>
+                <Breadcrumbs labels={labels} onNav={navBreadcrumb} />
+
+                {currentNode && (
+                  <h1 className="ob-node-title">{currentNode.title}</h1>
+                )}
+
+                {subcats.length > 0 && (
+                  <div className="msub-grid">
+                    {subcats.map((s) => (
+                      <SubCell
+                        key={s.id}
+                        node={s}
+                        plural={pluralize}
+                        onOpen={drillInto}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {looseItems.length > 0 ? (
+                  <div className="ob-items">
+                    {looseItems.map((item) => (
+                      <MenuPickRow
+                        key={item.id}
+                        item={item}
+                        currency={currency}
+                        quantity={qtyOf(item.id)}
+                        highlighted={item.id === highlightedItemId}
+                        onAdd={onAddToCart}
+                        onInfo={openItemView}
+                        onDec={onDecItem}
+                      />
+                    ))}
+                  </div>
+                ) : subcats.length === 0 ? (
+                  <div className="mtp-empty">Нет доступных позиций.</div>
+                ) : null}
+              </div>
+            </div>
           )}
         </>
       )}
 
-      {/* Cart sheet is HIDDEN while searching — see file header comment.
-          When search closes (query cleared, an item picked, keyboard
-          dismissed), it re-mounts at snap 0. Any expand-state is not
-          preserved across the toggle, which is fine: search is a
-          transient mode and the cart's default (collapsed) view is
-          exactly what the user wants when they return. */}
-      <BottomSheet
-          ref={cartSheetRef}
-          visible={!searchActive}
-          snapPoints={snapPoints}
-          initialSnap={0}
-          header={cartHeader}
-          footer={cartFooter}
-        >
-        <CartContent
-          items={draftItems}
-          contextItems={contextItems}
+      {/* Корзина — обычный блок внизу страницы (не draggable). На время
+          поиска скрыта, чтобы не мешать клавиатуре. */}
+      {!searchActive && (
+        <CartSheet
+          empty={cartEmpty}
+          meta={cartBarMeta}
+          total={draftTotal}
           currency={currency}
-          guestCount={guestCount}
-          onInc={(id) => useOrderStore.getState().incDraftItem(id)}
-          onDec={(id) => useOrderStore.getState().decDraftItem(id)}
-          onUpdateComment={(id, comment) =>
-            useOrderStore.getState().updateDraftItem(id, { comment })
-          }
+          expanded={cartExpanded && !cartEmpty}
+          onToggle={() => setCartExpanded((v) => !v)}
+          submitLabel={submitLabel}
+          canSubmit={canSubmit}
+          submitting={submitting}
+          onSubmit={handlePrimary}
+        >
+          <CartContent
+            items={draftItems}
+            contextItems={contextItems}
+            currency={currency}
+            guestCount={guestCount}
+            onInc={(id) => useOrderStore.getState().incDraftItem(id)}
+            onDec={(id) => useOrderStore.getState().decDraftItem(id)}
+            onOpenComment={openCommentFromCart}
+          />
+        </CartSheet>
+      )}
+
+      {collectOpen && (
+        <CollectSheet
+          mode={editingPaidId ? 'edit' : 'new'}
+          initialTableId={draft?.tableId || null}
+          initialComment={draft?.comments || ''}
+          count={draftItemCount}
+          total={draftTotal}
+          currency={currency}
+          submitting={submitting}
+          onClose={() => setCollectOpen(false)}
+          onConfirm={handleCollectConfirm}
         />
+      )}
 
-        {!draftIsEmpty && (
-          <div className="ob-order-comment">
-            <span className="ob-order-comment-label">Комментарий к заказу</span>
-            <button
-              className={
-                draft?.comments
-                  ? 'ob-order-comment-btn'
-                  : 'ob-order-comment-btn ob-order-comment-btn--empty'
-              }
-              onClick={editOrderComment}
-            >
-              {draft?.comments ? (
-                <span className="ob-order-comment-text">💬 {draft.comments}</span>
-              ) : (
-                <span className="ob-order-comment-placeholder">+ Добавить комментарий</span>
-              )}
-            </button>
-          </div>
-        )}
-      </BottomSheet>
+      {viewItem && (
+        <ItemViewModal
+          item={viewItem}
+          pathLabel={fullPathLabel(viewItem.category_id)}
+          qty={qtyOf(viewItem.id)}
+          currency={currency}
+          onClose={() => setViewItem(null)}
+          onAdd={() => onAddToCart(viewItem)}
+        />
+      )}
 
-      <TablePickerSheet
-        visible={tablePickerVisible}
-        currentTableId={draft?.tableId}
-        freeOnly={true}
-        onClose={() => setTablePickerVisible(false)}
-        onSelect={onTableSelect}
-      />
-
-      {guestDialogOpen && (
-        <GuestCountDialog
-          onPick={(n) => {
-            useOrderStore.getState().setGuestCount(n)
-            setSelectedGuest(1)
-            setGuestDialogOpen(false)
-          }}
-          onCancel={() => {
-            setGuestDialogOpen(false)
-            useOrderStore.getState().clearDraft()
-            goBack()
-          }}
+      {commentTarget && (
+        <CommentModal
+          item={commentTarget.item}
+          initial={
+            draftItems.find((i) => i.id === commentTarget.lineId)?.comment || ''
+          }
+          onClose={() => setCommentTarget(null)}
+          onSave={saveComment}
         />
       )}
     </div>

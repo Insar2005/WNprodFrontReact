@@ -1,0 +1,854 @@
+/* ==========================================================================
+   Menu tree + redesign components (July 2026, prototype menu-redesign).
+   ЕДИНСТВЕННЫЙ источник стилей для: ItemRow (mir-*), SubCell, Breadcrumbs,
+   SectionLabel, AddSubcatButton, TopBar (wn-topbar), поиска (wn-search),
+   GuestCard/CartLine (gcard/cl), CommentModal (cm-*), ItemViewModal (ivm-*),
+   шапки/футера корзины OrderBuilder (obc-*).
+   Дубликаты в global.css УДАЛЕНЫ — не добавлять их обратно.
+   Все значения 1:1 из menu-redesign/proto-*.jsx + HANDOFF.md.
+   ========================================================================== */
+
+/* ── TopBar (proto TopBar) ───────────────────────────────────────────
+   title 17/600, sub 12 mute, справа слот (пилюля). */
+.wn-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--wn-glass-border-subtle);
+}
+.wn-topbar-main { min-width: 0; flex: 1; }
+.wn-topbar-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wn-topbar-sub {
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Пилюля в шапке: «+ Импорт» (accent) / «Очистить» (danger). */
+.wn-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wn-accent-text);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--wn-dur-fast) var(--wn-ease);
+}
+.wn-pill-btn:active { background-color: var(--wn-bg-recessed); }
+.wn-pill-btn--danger { color: var(--wn-danger); padding: 6px 12px; gap: 5px; }
+
+/* ── Поиск (proto SearchBar): recessed поле, иконка слева ────────────
+   Скоуп только для экранов меню/заказа — глобальный .search-input
+   в других разделах не трогаем. */
+.wn-search {
+  padding: 10px 14px;
+  flex-shrink: 0;
+  position: relative;
+}
+.wn-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--wn-bg-recessed);
+  border: 1px solid transparent;
+  transition: border-color var(--wn-dur-fast) var(--wn-ease);
+}
+.wn-search-box:focus-within { border-color: var(--wn-accent-soft); }
+.wn-search-icon { color: var(--wn-ink-mute); flex-shrink: 0; display: inline-flex; }
+.wn-search-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 15px;
+  color: var(--wn-ink);
+  font-family: inherit;
+  padding: 0;
+}
+.wn-search-box input::placeholder { color: var(--wn-ink-faint); }
+.wn-search-box input::-webkit-search-cancel-button { display: none; }
+.wn-search-clear {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--wn-ink-mute);
+  display: inline-flex;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.wn-search-hide {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--wn-accent-text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* ── Breadcrumbs ───────────────────────────────────────────────────── */
+.mbc {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  margin-bottom: 6px;
+}
+.mbc::-webkit-scrollbar { display: none; }
+.mbc-seg { display: inline-flex; align-items: center; flex-shrink: 0; }
+.mbc-sep { color: var(--wn-ink-faint); font-size: 12px; padding: 0 3px; flex-shrink: 0; }
+.mbc-current {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.mbc-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background-color var(--wn-dur-fast) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.mbc-link:active { background-color: var(--wn-bg-recessed); }
+
+/* ── Subcategory cell ─────────────────────────────────────────────── */
+.msub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 14px 16px;
+  background-color: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background-color var(--wn-dur-fast) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.msub:active { background-color: var(--wn-bg-recessed); }
+.msub-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.msub-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msub-meta {
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msub-chev { flex-shrink: 0; color: var(--wn-ink-faint); }
+
+/* ── Section label («БЕЗ ПОДКАТЕГОРИИ», «Найдено: N») ─────────────── */
+.msec-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+  margin: 2px 4px 8px;
+}
+
+/* ── Add-subcategory dashed button ────────────────────────────────── */
+.madd-sub {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px dashed var(--wn-glass-border);
+  background: transparent;
+  color: var(--wn-ink-soft);
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color var(--wn-dur-fast) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.madd-sub:active { background-color: var(--wn-bg-recessed); }
+
+.msub-grid { display: grid; gap: 10px; margin-bottom: 18px; }
+.msub-add-wrap { margin-bottom: 12px; }
+
+/* ── Заголовок узла дерева (title + карандаш + мета) ──────────────── */
+.cat-header--tree { display: block; margin-bottom: 12px; }
+.cat-title-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.cat-header--tree .cat-header-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-title-edit { flex-shrink: 0; color: var(--wn-ink-faint); display: inline-flex; }
+.cat-header-meta { font-size: 12px; color: var(--wn-ink-mute); margin-top: 3px; }
+
+/* Заголовок узла в OrderBuilder — просто h1 20/700 (proto). */
+.ob-node-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   ItemRow (mir-*) — 1:1 proto-ui.jsx ItemRow + SearchResultRow.
+   pick: тап = +1 (bump), ⓘ слева, бейдж qty у названия, выезжающий «−»;
+   edit: карандаш слева, «скрыто» + dim для is_active=false.
+   pathLabel (только поиск): двухстрочный вариант — название / путь.
+   ========================================================================== */
+
+.mir-shell { position: relative; border-radius: 12px; overflow: hidden; }
+
+/* Выезжающий флажок «−» (pick, qty>0). Лежит ПОД строкой; строка
+   сдвигает свой padding-left и открывает его. */
+.mir-dec-flag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 46px;
+  z-index: 2;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+  transform: translateX(-100%);
+  transition: transform var(--wn-dur-base) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.mir-shell--flagged .mir-dec-flag { transform: translateX(0); }
+
+.mir-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 14px 16px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  background-color: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 12px;
+  transition:
+    background-color var(--wn-dur-fast) var(--wn-ease),
+    padding-left var(--wn-dur-base) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.mir-row:active { background-color: var(--wn-bg-recessed); }
+.mir-shell--flagged .mir-row { padding-left: 58px; }
+.mir-row--hidden { opacity: 0.55; }
+
+/* micro-bump при добавлении в заказ (proto .mbump). */
+.mir-row--bump { animation: wn-mbump 0.28s var(--wn-ease); }
+@keyframes wn-mbump {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.975); }
+  100% { transform: scale(1); }
+}
+
+/* ⓘ (pick) */
+.mir-info-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-left: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--wn-ink-mute);
+  -webkit-tap-highlight-color: transparent;
+}
+.mir-info-btn svg { display: block; }
+
+/* карандаш-подсказка (edit) */
+.mir-edit-hint {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-left: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wn-ink-faint);
+}
+
+/* Центральная колонка. Однострочный режим: название + бейджи в ряд.
+   Двухстрочный (pathLabel): название/бейджи строкой, путь под ней. */
+.mir-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mir-title-wrap--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+.mir-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mir-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--wn-ink);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mir-path {
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* «скрыто» (edit) */
+.mir-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--wn-ink-mute);
+  background: var(--wn-bg-recessed);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Бейдж количества (pick, qty>0) — сплошной акцент, белая цифра. */
+.mir-qty {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--wn-accent);
+  border-radius: 999px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Правая колонка: порция (12 mute) над ценой (15/600 accent). */
+.mir-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.mir-portion { font-size: 12px; color: var(--wn-ink-mute); white-space: nowrap; }
+.mir-price {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Пульс подсветки .mir-row--highlight живёт в global.css (богатая
+   версия с волнами box-shadow) — здесь не дублируем. */
+@media (prefers-reduced-motion: reduce) {
+  .mir-row--bump { animation: none; }
+}
+
+/* ==========================================================================
+   CommentModal (cm-*) — proto CommentModal.
+   ========================================================================== */
+.cm-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cm-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: var(--wn-bg-recessed);
+  border: 1px solid var(--wn-glass-border-subtle);
+  font-size: 15px;
+  color: var(--wn-ink);
+  box-sizing: border-box;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  line-height: 1.45;
+}
+.cm-textarea:focus { border-color: var(--wn-accent-soft); }
+.cm-chips-block { margin-top: 14px; }
+.cm-chips-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+  margin: 0 2px 10px;
+}
+.cm-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cm-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink-soft);
+  transition: background-color var(--wn-dur-fast) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.cm-chip--on { border-color: transparent; background: var(--wn-accent); color: #fff; }
+
+/* ==========================================================================
+   ItemViewModal (ivm-*) — proto ItemViewModal: карточка позиции (ⓘ).
+   Рядки label/value на recessed-плашке + описание + кнопка в футере.
+   ========================================================================== */
+.ivm-card {
+  background: var(--wn-bg-recessed);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ivm-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 44px;
+}
+.ivm-row + .ivm-row { border-top: 1px solid var(--wn-glass-border-subtle); }
+.ivm-label { font-size: 14px; color: var(--wn-ink-mute); flex-shrink: 0; }
+.ivm-value {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ivm-value--accent { color: var(--wn-accent-text); }
+.ivm-desc-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+  margin: 14px 2px 6px;
+}
+.ivm-desc { margin: 0; font-size: 15px; color: var(--wn-ink); line-height: 1.5; }
+
+/* ==========================================================================
+   Корзина: GuestCard + CartLine (gcard / cl) — proto CartSheet внутренности.
+   ========================================================================== */
+.cc-cart { padding: 4px 0; }
+.cc-empty { padding: 32px 16px; text-align: center; color: var(--wn-ink-mute); }
+.cc-empty-sub { font-size: 13px; color: var(--wn-ink-faint); margin-top: 4px; }
+
+.gcard {
+  border-radius: 14px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  overflow: hidden;
+  background: var(--wn-bg-elevated);
+  margin-bottom: 12px;
+}
+.gcard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--wn-accent-fill);
+}
+.gcard-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.gcard-name { font-size: 15px; font-weight: 700; color: var(--wn-accent-text); }
+.gcard-subtotal {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+.gcard-body { padding: 0 14px; }
+.gcard-empty { padding: 14px; font-size: 13px; color: var(--wn-ink-faint); }
+
+.cl { padding: 12px 0; border-bottom: 1px solid var(--wn-glass-border-subtle); }
+.cl--last { border-bottom: none; }
+.cl-top { display: flex; align-items: flex-start; gap: 10px; }
+.cl-info { flex: 1; min-width: 0; }
+.cl-title { font-size: 15px; font-weight: 600; color: var(--wn-ink); line-height: 1.3; }
+.cl-meta {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.cl-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.cl-step {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--wn-glass-border);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.cl-step:active { background: var(--wn-bg-recessed); }
+.cl-qty {
+  min-width: 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+}
+.cl-sum {
+  min-width: 84px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+}
+.cl--ctx .cl-title { color: var(--wn-ink-soft); }
+.cl-comment-row { margin-top: 8px; }
+.cl-add-comment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--wn-accent-text);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.cl-comment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: none;
+  background: var(--wn-accent-fill);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--wn-accent-text);
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+}
+.cl-comment-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cc-grand {
+  display: flex;
+  align-items: center;
+  padding: 12px 4px 4px;
+  border-top: 1px solid var(--wn-glass-border-subtle);
+  margin-top: 4px;
+}
+.cc-grand-label { font-size: 13px; color: var(--wn-ink-mute); }
+.cc-grand-total {
+  margin-left: auto;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Шит корзины OrderBuilder (obc-*) — 1:1 proto CartSheet.
+   НЕ draggable: обычный flex-блок внизу страницы. Тап по полосе «Заказ»
+   раскрывает до 60vh (transition max-height). Пустая корзина — только
+   строка-подсказка. Стол и комментарий к заказу здесь НЕ живут — они в
+   CollectSheet («Оформление заказа», открывается кнопкой «Собрать»).
+   ========================================================================== */
+
+/* Пустое состояние: одна строка-подсказка у нижнего края. */
+.obc-empty {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  padding-bottom: max(12px, var(--wn-safe-bottom, 0px), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  text-align: center;
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+}
+
+.obc-sheet {
+  flex-shrink: 0;
+  background: var(--wn-bg-elevated);
+  border-top: 1px solid var(--wn-glass-border);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(140px + var(--wn-safe-bottom, 0px));
+  transition: max-height var(--wn-dur-slow) var(--wn-ease);
+}
+.obc-sheet--expanded {
+  max-height: 60vh;
+  max-height: 60dvh;
+}
+
+/* Полоса-переключатель: «Заказ» + мета + шеврон (вниз — свёрнуто,
+   вверх — раскрыто, как в прототипе). */
+.obc-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.obc-bar-title { font-size: 15px; font-weight: 600; color: var(--wn-ink); flex-shrink: 0; }
+.obc-bar-meta {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.obc-bar-chev {
+  margin-left: auto;
+  color: var(--wn-ink-mute);
+  flex-shrink: 0;
+  display: inline-flex;
+  transform: rotate(90deg);
+  transition: transform var(--wn-dur-base) var(--wn-ease);
+}
+.obc-bar-chev--up { transform: rotate(-90deg); }
+
+/* Раскрытое тело — гостевые карточки, свой скролл. */
+.obc-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 8px 16px 4px;
+}
+.obc-body::-webkit-scrollbar { display: none; }
+
+/* Футер: Итого + сумма + акцентная кнопка (proto). */
+.obc-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  padding-bottom: max(18px, var(--wn-safe-bottom, 0px), env(safe-area-inset-bottom));
+}
+.obc-sheet--expanded .obc-footer {
+  border-top: 1px solid var(--wn-glass-border-subtle);
+}
+.obc-footer-label { font-size: 13px; color: var(--wn-ink-mute); flex-shrink: 0; }
+.obc-footer-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.obc-footer-btn {
+  margin-left: auto;
+  height: 42px;
+  padding: 0 24px;
+  border-radius: 11px;
+  border: none;
+  cursor: pointer;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.obc-footer-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ==========================================================================
+   CollectSheet (clx-*) — «Оформление заказа», 1:1 proto CollectSheet.
+   Секция СТОЛ (сетка 4 колонки), КОММЕНТАРИЙ К ЗАКАЗУ (textarea),
+   строка «N позиций · итого», футер [Отмена][Оформить заказ].
+   ========================================================================== */
+.clx-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+  margin: 0 2px 10px;
+}
+.clx-section { margin-bottom: 14px; }
+.clx-hall-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+  margin: 10px 2px 8px;
+}
+.clx-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.clx-table {
+  height: 48px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--wn-dur-fast) var(--wn-ease);
+}
+.clx-table--on {
+  border-color: transparent;
+  background: var(--wn-accent);
+  color: #fff;
+}
+.clx-table--busy {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.clx-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px;
+  color: var(--wn-ink-mute);
+  font-size: 14px;
+}
+.clx-summary-total {
+  margin-left: auto;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Edge-to-edge внутри .page (16px padding): шапка и поиск редактора меню
+   должны тянуться от края до края, как в прототипе. OrderBuilder не
+   затрагивается — .ob-page живёт без .page-обёртки.
+   ========================================================================== */
+.menu-page > .wn-topbar { margin: -16px -16px 0; }
+.menu-page .wn-search { margin: 0 -16px; }

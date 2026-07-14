@@ -628,14 +628,22 @@ export async function createCategory(workplaceId, body) {
   const me = ensureMe()
   if (!hasAccess(workplaceId, me.id)) throw notFound('Заведение')
   if (find(db.menu_categories, body.id)) throw conflict('Category id already exists')
+  const parentId = body.parent_id ?? null
+  // Position is computed among SIBLINGS (same parent) so a new subcategory
+  // lands at the end of its own branch, not the global list.
   const positions = db.menu_categories
-    .filter((c) => c.workplace_id === workplaceId)
+    .filter(
+      (c) =>
+        c.workplace_id === workplaceId &&
+        (c.parent_id ?? null) === parentId,
+    )
     .map((c) => c.position)
   const maxPos = positions.length ? Math.max(...positions) : -1
   const cat = {
     id: body.id,
     workplace_id: workplaceId,
     title: body.title,
+    parent_id: parentId,
     position: maxPos + 1,
     is_active: true,
   }
@@ -648,7 +656,7 @@ export async function updateCategory(categoryId, patch) {
   const me = ensureMe()
   const c = find(db.menu_categories, categoryId)
   if (!c || !hasAccess(c.workplace_id, me.id)) throw notFound('Категория')
-  const allowed = ['title', 'is_active']
+  const allowed = ['title', 'is_active', 'parent_id']
   tx(() => {
     for (const k of allowed) if (patch[k] !== undefined) c[k] = patch[k]
   })
@@ -661,12 +669,28 @@ export async function deleteCategory(categoryId) {
   const c = find(db.menu_categories, categoryId)
   if (!c || !hasAccess(c.workplace_id, me.id)) throw notFound('Категория')
   tx(() => {
-    const itemIds = db.menu_items.filter((i) => i.category_id === categoryId).map((i) => i.id)
-    db.menu_items = db.menu_items.filter((i) => i.category_id !== categoryId)
+    // Collect the whole subtree (this category + all descendants), mirror
+    // the backend CASCADE so items under removed subcategories drop too.
+    const toRemove = new Set([categoryId])
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const c of db.menu_categories) {
+        const pid = c.parent_id ?? null
+        if (pid && toRemove.has(pid) && !toRemove.has(c.id)) {
+          toRemove.add(c.id)
+          grew = true
+        }
+      }
+    }
+    const itemIds = db.menu_items
+      .filter((i) => toRemove.has(i.category_id))
+      .map((i) => i.id)
+    db.menu_items = db.menu_items.filter((i) => !toRemove.has(i.category_id))
     for (const oi of db.order_items) {
       if (itemIds.includes(oi.menu_item_id)) oi.menu_item_id = null
     }
-    db.menu_categories = db.menu_categories.filter((x) => x.id !== categoryId)
+    db.menu_categories = db.menu_categories.filter((x) => !toRemove.has(x.id))
   })
 }
 

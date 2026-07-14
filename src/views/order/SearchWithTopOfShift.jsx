@@ -1,46 +1,29 @@
 import { useRef, useState } from 'react'
+import { SearchIcon, CloseIcon } from '@/components/menu/menuIcons'
 
 /**
- * Menu search input.
+ * Поле поиска по меню — вид 1:1 SearchBar из menu-redesign
+ * (proto-guests.jsx): recessed-поле 40px, лупа слева, «×» справа.
  *
- * Was: input + "Top of shift" dropdown that showed the user's most-clicked
- * items on focus. The dropdown was removed at customer request (June 2026)
- * because it kept opening at inopportune moments and blocked the menu
- * behind it. The file keeps the same name/import path for continuity —
- * we might revive the dropdown later.
+ * Историческая справка: раньше тут был дропдаун «Топ за смену» —
+ * убран по просьбе заказчика (июнь 2026); имя файла оставлено ради
+ * стабильного import-пути, вдруг вернём.
  *
- * Now: plain input with two trailing controls that swap in and out:
- *   • "×" (clear) — shown when the field has text; wipes the query.
- *   • "Скрыть" — shown when the input has focus (keyboard is docked on
- *     mobile); blurs the input which lets Telegram/iOS dismiss the
- *     keyboard.
+ * Поверх прототипа сохранён «Скрыть» (только когда поле в фокусе и
+ * пустое) — блюрит инпут, чтобы Telegram/iOS спрятали клавиатуру.
  *
  * Props:
- *   value          — current query (controlled)
+ *   value          — текущий запрос (controlled)
  *   onChange       — (string) => void
- *   onFocusChange  — (boolean) => void, notified on focus/blur so the
- *                    parent can hide overlays that shouldn't be in the
- *                    way of the keyboard (cart sheet, submit button).
- *                    Optional — pass null to opt out.
- *   placeholder    — placeholder text
- *   shiftId, items, categoryById, onPick — no longer used; kept for
- *                    API compatibility. Removing them from the caller
- *                    is fine, but leaving them in place is harmless.
+ *   onFocusChange  — (boolean) => void — родитель прячет оверлеи
+ *                    (шит корзины) на время клавиатуры. Опционально.
+ *   placeholder
  */
 export default function SearchWithTopOfShift({
   value,
   onChange,
   onFocusChange = null,
   placeholder = 'Поиск по меню…',
-  // Kept to match the previous prop signature — see note above.
-  // eslint-disable-next-line no-unused-vars
-  shiftId,
-  // eslint-disable-next-line no-unused-vars
-  items,
-  // eslint-disable-next-line no-unused-vars
-  categoryById,
-  // eslint-disable-next-line no-unused-vars
-  onPick,
 }) {
   const [focused, setFocused] = useState(false)
   const inputRef = useRef(null)
@@ -51,57 +34,53 @@ export default function SearchWithTopOfShift({
   }
 
   const hideKeyboard = () => {
-    // Blurring the input is what actually dismisses the mobile keyboard
-    // in Telegram WebApp. We also flip focused=false ourselves so the
-    // "Скрыть" button hides immediately (before the browser's blur
-    // event lands) — feels snappier.
+    // Именно blur убирает мобильную клавиатуру в Telegram WebApp.
+    // focused=false ставим сами, чтобы «Скрыть» исчез мгновенно.
     setFocusState(false)
     inputRef.current?.blur()
   }
 
   return (
-    <div className="search-wrap search-tof">
-      <input
-        ref={inputRef}
-        type="search"
-        className="search-input"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocusState(true)}
-        onBlur={() => setFocusState(false)}
-        // Hint to mobile keyboards: search action, no autocorrect UI.
-        inputMode="search"
-        enterKeyHint="search"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-      />
-      {value ? (
-        <button
-          type="button"
-          className="search-clear"
-          onClick={() => onChange('')}
-          aria-label="Очистить"
-        >
-          ×
-        </button>
-      ) : focused ? (
-        // The "Скрыть" pill only appears in the empty-field focused state
-        // — it's the moment when the user has a keyboard up but can't
-        // easily get rid of it. Once they type something, "×" (clear)
-        // is more useful and replaces it. On desktop this button is
-        // essentially decorative (no keyboard to hide) but harmless.
-        <button
-          type="button"
-          className="search-hide-kb"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={hideKeyboard}
-          aria-label="Скрыть клавиатуру"
-        >
-          Скрыть
-        </button>
-      ) : null}
+    <div className="wn-search">
+      <div className="wn-search-box">
+        <span className="wn-search-icon" aria-hidden>
+          <SearchIcon width={18} height={18} />
+        </span>
+        <input
+          ref={inputRef}
+          type="search"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocusState(true)}
+          onBlur={() => setFocusState(false)}
+          inputMode="search"
+          enterKeyHint="search"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+        {value ? (
+          <button
+            type="button"
+            className="wn-search-clear"
+            onClick={() => onChange('')}
+            aria-label="Очистить"
+          >
+            <CloseIcon width={16} height={16} />
+          </button>
+        ) : focused ? (
+          <button
+            type="button"
+            className="wn-search-hide"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={hideKeyboard}
+            aria-label="Скрыть клавиатуру"
+          >
+            Скрыть
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }

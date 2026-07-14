@@ -1,30 +1,24 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatMoney } from '@/utils/format'
+import { InfoIcon, PencilIcon, MinusIcon } from '@/components/menu/menuIcons'
 
 /**
- * Universal menu item row. Renders the same item in two modes:
- *   • `pick` — used in OrderBuilder. Tap = add to cart. Shows an info
- *     button (ⓘ) on the left if onInfo is provided. Optional pathLabel
- *     under the title — the category breadcrumb, shown only in search
- *     results so the user knows where a found dish lives.
- *   • `edit` — used in the menu editor. Tap = open form. Shows a
- *     "скрыто" badge for inactive items; the whole row dims.
+ * Универсальная строка позиции — 1:1 ItemRow / SearchResultRow из
+ * menu-redesign (proto-ui.jsx, proto-guests.jsx).
  *
- * `highlighted` (July 2026): when true, the row pulses briefly with the
- * accent color AND scrolls itself into view. Used by the search flow so
- * that a picked search result is easy to find in its category. The prop
- * is controlled by the caller (via useMenuStore.highlightedItemId); this
- * component only reacts to it.
+ *   • `pick` — OrderBuilder. Тап по карточке = +1 активному гостю
+ *     (микро-«bump»). Слева ⓘ (onInfo → карточка позиции). При qty>0 —
+ *     бейдж количества у названия (сплошной акцент, белая цифра) и
+ *     выезжающий слева флажок «−» (onDec). НИКАКОЙ заливки карточки —
+ *     карточка остаётся плоской elevated с hairline-границей.
+ *   • `edit` — редактор меню. Тап = открыть форму. Слева карандаш;
+ *     скрытая позиция — opacity 0.55 + бейдж «скрыто».
  *
- * Props:
- *   item        — { id, title, price, portion, is_active, ... }
- *   currency    — RUB/USD/... for formatMoney
- *   mode        — 'pick' | 'edit'
- *   quantity    — items already in the cart (pick mode); shows "×N" badge
- *   pathLabel   — optional "Категория › Подкатегория" string (search only)
- *   highlighted — bool; true = pulse & scroll into view
- *   onClick     — (item) => void; row tapped
- *   onInfo      — (item) => void; info button tapped (pick mode only)
+ * pathLabel (только результаты поиска): строка становится двухэтажной —
+ * название сверху, путь «Категория › Подкатегория» под ним (12px mute),
+ * как SearchResultRow в прототипе.
+ *
+ * `highlighted`: короткий пульс + scrollIntoView (поиск → категория).
  */
 export default function MenuItemRow({
   item,
@@ -35,70 +29,119 @@ export default function MenuItemRow({
   highlighted = false,
   onClick,
   onInfo,
+  onDec,
 }) {
   const rowRef = useRef(null)
+  const [bump, setBump] = useState(false)
 
-  // Scroll into view whenever highlighted flips ON. useEffect is right
-  // here because we're synchronizing with an external system (DOM
-  // scroll position) — not pushing derived state back into React.
+  // Синхронизация с внешней системой (позиция скролла DOM) — законный
+  // useEffect, состояние React не трогаем.
   useEffect(() => {
     if (highlighted && rowRef.current) {
-      // 'center' keeps some context above/below visible; 'smooth' feels
-      // like a follow-up to the animation the search dropdown ran.
       rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [highlighted])
 
   const hidden = mode === 'edit' && item.is_active === false
   const inCart = mode === 'pick' && quantity > 0
+  const showFlag = inCart && !!onDec
+  const stacked = !!pathLabel
 
-  const cls = [
+  const shellCls = ['mir-shell', showFlag ? 'mir-shell--flagged' : '']
+    .filter(Boolean)
+    .join(' ')
+  const rowCls = [
     'mir-row',
-    `mir-row--${mode}`,
     hidden ? 'mir-row--hidden' : '',
-    inCart ? 'mir-row--in-cart' : '',
     highlighted ? 'mir-row--highlight' : '',
+    bump ? 'mir-row--bump' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
   const handleClick = () => {
+    if (mode === 'pick') setBump(true)
     onClick?.(item)
   }
-
   const handleInfo = (e) => {
-    // Don't bubble — otherwise the row's onClick fires and adds to cart.
+    // Не всплываем — иначе сработает onClick строки и добавит в корзину.
     e.stopPropagation()
     onInfo?.(item)
   }
+  const handleDec = (e) => {
+    e.stopPropagation()
+    onDec?.(item)
+  }
+
+  const badges = (
+    <>
+      {hidden && <span className="mir-badge">скрыто</span>}
+      {inCart && <span className="mir-qty">{quantity}</span>}
+    </>
+  )
 
   return (
-    <div ref={rowRef} className={cls} onClick={handleClick}>
-      {mode === 'pick' && onInfo && (
+    <div className={shellCls}>
+      {/* Флажок «−» под строкой; открывается сдвигом padding-left. */}
+      {mode === 'pick' && onDec && (
         <button
           type="button"
-          className="mir-info-btn"
-          onClick={handleInfo}
-          aria-label="Подробнее"
+          className="mir-dec-flag"
+          onClick={handleDec}
+          aria-label="Убрать одну"
+          tabIndex={showFlag ? 0 : -1}
         >
-          ⓘ
+          <MinusIcon width={22} height={22} />
         </button>
       )}
 
-      <div className="mir-main">
-        <div className="mir-title-line">
-          <span className="mir-title">{item.title}</span>
-          {hidden && <span className="mir-hidden-badge">скрыто</span>}
-          {inCart && <span className="mir-qty-badge">×{quantity}</span>}
-        </div>
-        {pathLabel && (
-          <span className="mir-path">{pathLabel}</span>
+      <div
+        ref={rowRef}
+        className={rowCls}
+        onClick={handleClick}
+        onAnimationEnd={() => setBump(false)}
+      >
+        {mode === 'pick' && onInfo && (
+          <button
+            type="button"
+            className="mir-info-btn"
+            onClick={handleInfo}
+            aria-label="Подробнее"
+          >
+            <InfoIcon width={22} height={22} />
+          </button>
         )}
-      </div>
+        {mode === 'edit' && (
+          <span className="mir-edit-hint" aria-hidden="true">
+            <PencilIcon width={20} height={20} />
+          </span>
+        )}
 
-      <div className="mir-right">
-        {item.portion && <span className="mir-portion">{item.portion}</span>}
-        <span className="mir-price">{formatMoney(item.price, currency)}</span>
+        <div
+          className={
+            stacked ? 'mir-title-wrap mir-title-wrap--stacked' : 'mir-title-wrap'
+          }
+        >
+          {stacked ? (
+            <>
+              <span className="mir-title-line">
+                <span className="mir-title">{item.title}</span>
+                {badges}
+              </span>
+              <span className="mir-path">{pathLabel}</span>
+            </>
+          ) : (
+            <>
+              <span className="mir-title">{item.title}</span>
+              {badges}
+            </>
+          )}
+        </div>
+
+        <div className="mir-right">
+          {item.portion && <span className="mir-portion">{item.portion}</span>}
+          <span className="mir-price">{formatMoney(item.price, currency)}</span>
+        </div>
       </div>
     </div>
   )

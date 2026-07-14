@@ -4,12 +4,9 @@ import MenuItemRow from '@/views/menu/MenuItemRow'
  * Thin wrapper around MenuItemRow for OrderBuilder (pick mode).
  *
  * Adds `pathLabel` — optional category breadcrumb shown under the item
- * title. Used only in search results, so the user knows where each found
- * dish lives in the menu ("Капучино · Завтраки › Напитки"). When the
- * category is the active one we don't pass pathLabel — it'd be redundant.
- *
- * Also forwards `highlighted` so the search-flow pulse animation reaches
- * the underlying row.
+ * title. Used only in search results. Forwards `highlighted` for the
+ * search-flow pulse, and `onDec` for the slide-out "−" flag (shown when
+ * the item is already in the active guest's cart).
  */
 export default function MenuPickRow({
   item,
@@ -19,6 +16,7 @@ export default function MenuPickRow({
   highlighted = false,
   onAdd,
   onInfo,
+  onDec,
 }) {
   return (
     <MenuItemRow
@@ -30,6 +28,7 @@ export default function MenuPickRow({
       highlighted={highlighted}
       onClick={onAdd}
       onInfo={onInfo}
+      onDec={onDec}
     />
   )
 }

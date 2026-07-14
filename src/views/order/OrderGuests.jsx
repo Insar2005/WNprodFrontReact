@@ -1,8 +1,12 @@
 import '@/styles/order-guests.css'
 
 /**
- * "How many guests?" dialog shown when starting a new order.
- * 1 = single bill ("Один чек"); 2..10 = split the order per guest.
+ * Диалог «Сколько гостей?».
+ *
+ * ⚠️ Июль 2026 (редизайн menu-redesign): в OrderBuilder больше НЕ
+ * используется — число гостей задаётся только горизонтальным списком
+ * GuestBar («＋» добавить, «×» удалить), отдельного пикера в дизайне
+ * нет. Компонент и стили оставлены на случай отката.
  */
 export function GuestCountDialog({ onPick, onCancel }) {
   return (
@@ -27,10 +31,16 @@ export function GuestCountDialog({ onPick, onCancel }) {
 }
 
 /**
- * Horizontal guest switcher shown above the items.
- * - 1 guest → a single "Один чек" tab.
- * - 2+ → "Гость 1 … N", each removable (×), plus "＋" to add (up to 10).
- * `counts` is an optional map { [guest]: itemQty } for a small badge.
+ * Горизонтальный свитчер гостей над позициями — 1:1 GuestBar из
+ * menu-redesign (proto-guests.jsx).
+ *
+ *   • 1 гость → одиночный чип «Один чек» (без «×»).
+ *   • 2+ → «Гость 1 … N», у каждого «×» (удалить), «＋» добавляет
+ *     (до 10). Активный чип — accent-fill с полупрозрачной акцентной
+ *     рамкой; бейдж количества: у активного — сплошной акцент/белый,
+ *     у остальных — recessed/mute.
+ *
+ * `counts` — опциональная map { [guest]: qty } для бейджа.
  */
 export function GuestBar({ guestCount, selected, counts = {}, onSelect, onAdd, onRemove }) {
   const single = guestCount <= 1
@@ -39,8 +49,15 @@ export function GuestBar({ guestCount, selected, counts = {}, onSelect, onAdd, o
       {Array.from({ length: guestCount }, (_, i) => i + 1).map((g) => {
         const on = g === selected
         const qty = counts[g] || 0
+        const cls = [
+          'gb-chip',
+          on ? 'gb-chip--on' : '',
+          single ? 'gb-chip--single' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
         return (
-          <div key={g} className={on ? 'gb-chip gb-chip--on' : 'gb-chip'}>
+          <div key={g} className={cls}>
             <button
               type="button"
               className="gb-chip-label"
