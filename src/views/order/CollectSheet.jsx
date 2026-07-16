@@ -2,16 +2,17 @@ import { useMemo, useState } from 'react'
 import { useHallStore } from '@/stores/hall'
 import { formatMoney } from '@/utils/format'
 import { pluralize } from '@/utils/pluralize'
+import { ChairIcon, PencilIcon } from '@/components/menu/menuIcons'
+import TablePickerSheet from './TablePickerSheet'
 
 /**
- * «Оформление заказа» — 1:1 CollectSheet из menu-redesign
+ * «Оформление заказа» — CollectSheet из menu-redesign
  * (proto-order-flow.jsx). Открывается кнопкой «Собрать» в корзине.
  *
- *   • СТОЛ — сетка чипов 4 колонки (в прототипе №1–12; здесь — реальные
- *     столы из залов). Занятые (order_id, кроме уже выбранного) —
- *     приглушены и недоступны. Первый чип «Без стола» — заказ можно
- *     оформить и без привязки (это поведение приложения, сохранено).
- *     При нескольких залах — подпись зала над каждой сеткой.
+ *   • СТОЛ — плашка с текущим выбором («Стол №4 · Зал» / «Без стола»);
+ *     тап открывает TablePickerSheet — SVG-карту залов (занятые столы
+ *     недоступны, «Без стола» в футере). Решение владельца: карта вместо
+ *     сетки номеров из прототипа.
  *   • КОММЕНТАРИЙ К ЗАКАЗУ — textarea (2 строки, до 2000).
  *   • Строка «N позиций · итого», футер [Отмена][Оформить заказ].
  *
@@ -43,24 +44,16 @@ export default function CollectSheet({
 
   const [tableId, setTableId] = useState(initialTableId)
   const [comment, setComment] = useState(initialComment || '')
+  const [pickerOpen, setPickerOpen] = useState(false)
 
-  const sortedHalls = useMemo(
-    () => [...halls].sort((a, b) => a.position - b.position),
-    [halls],
-  )
-  const tablesByHall = useMemo(() => {
-    const m = {}
-    for (const t of tables) {
-      if (!m[t.hall_id]) m[t.hall_id] = []
-      m[t.hall_id].push(t)
-    }
-    for (const id of Object.keys(m)) {
-      m[id].sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
-    }
-    return m
-  }, [tables])
-
-  const isBusy = (t) => !!t.order_id && t.id !== initialTableId
+  // «Стол №4 · Летний зал» / «Без стола»
+  const tableLabel = useMemo(() => {
+    if (tableId == null) return null
+    const t = tables.find((x) => x.id === tableId)
+    if (!t) return null
+    const hall = halls.find((h) => h.id === t.hall_id)
+    return `Стол №${t.number}${hall ? ` · ${hall.name}` : ''}`
+  }, [tableId, tables, halls])
 
   const onOverlayClick = (e) => {
     if (e.target === e.currentTarget) onClose?.()
@@ -94,84 +87,23 @@ export default function CollectSheet({
           {mode !== 'edit' && (
             <div className="clx-section">
               <div className="clx-label">Стол</div>
-              {sortedHalls.length <= 1 ? (
-                <div className="clx-grid">
-                  <button
-                    type="button"
-                    className={`clx-table${tableId == null ? ' clx-table--on' : ''}`}
-                    onClick={() => setTableId(null)}
-                  >
-                    Без стола
-                  </button>
-                  {(tablesByHall[sortedHalls[0]?.id] || []).map((t) => {
-                    const busy = isBusy(t)
-                    const on = t.id === tableId
-                    const cls = [
-                      'clx-table',
-                      on ? 'clx-table--on' : '',
-                      busy ? 'clx-table--busy' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className={cls}
-                        disabled={busy}
-                        onClick={() => setTableId(t.id)}
-                      >
-                        №{t.number}
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <>
-                  <div className="clx-grid">
-                    <button
-                      type="button"
-                      className={`clx-table${tableId == null ? ' clx-table--on' : ''}`}
-                      onClick={() => setTableId(null)}
-                    >
-                      Без стола
-                    </button>
-                  </div>
-                  {sortedHalls.map((h) => {
-                    const hallTables = tablesByHall[h.id] || []
-                    if (hallTables.length === 0) return null
-                    return (
-                      <div key={h.id}>
-                        <div className="clx-hall-name">{h.name}</div>
-                        <div className="clx-grid">
-                          {hallTables.map((t) => {
-                            const busy = isBusy(t)
-                            const on = t.id === tableId
-                            const cls = [
-                              'clx-table',
-                              on ? 'clx-table--on' : '',
-                              busy ? 'clx-table--busy' : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' ')
-                            return (
-                              <button
-                                key={t.id}
-                                type="button"
-                                className={cls}
-                                disabled={busy}
-                                onClick={() => setTableId(t.id)}
-                              >
-                                №{t.number}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </>
-              )}
+              <button
+                type="button"
+                className="clx-plate"
+                onClick={() => setPickerOpen(true)}
+              >
+                <span className="clx-plate-ico" aria-hidden>
+                  <ChairIcon width={18} height={18} />
+                </span>
+                <span
+                  className={`clx-plate-text${tableLabel ? '' : ' clx-plate-text--none'}`}
+                >
+                  {tableLabel || 'Без стола'}
+                </span>
+                <span className="clx-plate-edit" aria-hidden>
+                  <PencilIcon width={15} height={15} />
+                </span>
+              </button>
             </div>
           )}
 
@@ -215,6 +147,17 @@ export default function CollectSheet({
           </div>
         </div>
       </div>
+
+      <TablePickerSheet
+        visible={pickerOpen}
+        currentTableId={tableId}
+        freeOnly
+        onClose={() => setPickerOpen(false)}
+        onSelect={(id) => {
+          setTableId(id)
+          setPickerOpen(false)
+        }}
+      />
     </div>
   )
 }

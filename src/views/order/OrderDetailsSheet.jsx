@@ -3,30 +3,176 @@ import { useNavigate } from 'react-router-dom'
 import { useOrderStore } from '@/stores/order'
 import { useWorkplaceStore } from '@/stores/workplace'
 import { useUiStore } from '@/stores/ui'
-import { formatMoney, formatDuration } from '@/utils/format'
+import { formatMoney, formatTime } from '@/utils/format'
+import { pluralize } from '@/utils/pluralize'
 import { hapticImpact } from '@/utils/telegram'
 import { useLiveDuration } from '@/hooks/useLiveDuration'
+import WnSheet from '@/components/WnSheet'
 import TablePickerSheet from './TablePickerSheet'
-import '@/styles/order-guests.css'
+import {
+  CheckIcon,
+  PlusIcon,
+  MapIcon,
+  TrashIcon,
+} from '@/components/menu/menuIcons'
+import '@/styles/order-sheet.css'
 
 /**
- * Order details sheet — two modes: active (pay/add/move/delete) and paid
- * (reopen/edit). (Was OrderDetailsSheet.vue.)
+ * Карточка заказа — 1:1 UoActiveSheet / UoClosedSheet из прототипа
+ * waiter-note-unified (unified-prototype/order-sheet.jsx), полноэкранный
+ * WnSheet.
  *
- * ── Vue → React notes ───────────────────────────────────────────────
- * - liveOrder: re-reads the order from the store by id each render so
- *   optimistic updates (served toggle) reflect instantly. Was a computed;
- *   here useMemo over the store's orders + the prop fallback.
- * - watch(order.id) resetting tips → useEffect keyed on order?.id.
- * - useLiveDuration composable → hook.
- * - $emit('close'|'reopen'|'edit') → onClose / onReopen / onEdit.
+ * Активный заказ:
+ *   • мета «Зал · открыт в HH:MM · N мин (warn>30) · K гостей»;
+ *   • «ПОЗИЦИИ» + «подано X из Y» + прогресс-бар; тап по строке
+ *     переключает «подано» (у позиции это флаг, не счётчик по штукам —
+ *     см. отклонения в ответе), корзинка → confirm (последняя позиция
+ *     закрывает заказ целиком);
+ *   • «＋ Добавить позиции» → сборка (add-режим), «Другой стол» →
+ *     TablePickerSheet (SVG-карта залов, занятые недоступны, есть
+ *     «Без стола») — решение владельца вместо сетки из прототипа;
+ *   • тумблер «Разделить счёт по гостям» (при >1 гостя в позициях) —
+ *     группирует позиции с подытогами; оплата остаётся общей (частичной
+ *     оплаты по гостю на бэке нет);
+ *   • Итого; чаевые Без/5%/10%/Свои (модалка с суммой и ≈%);
+ *   • «Подать всё» + «Оплатить <итого+чаевые>» (без confirm — как в
+ *     прототипе; «Вернуть в активные» страхует), «Удалить заказ».
  *
- * ── Move ────────────────────────────────────────────────────────────
- * "Перенести на другой стол" opens TablePickerSheet inline (state
- * movePickerVisible); picking a table calls moveOrder, picking "Без стола"
- * detaches. Paid mode (history) never shows move.
- * ─────────────────────────────────────────────────────────────────────
+ * Чек (paidMode):
+ *   • чип «Оплачен в HH:MM» + «Зал · K гостей»; позиции read-only;
+ *     Чаевые (тап — правка через ту же модалку, если передан onEdit);
+ *     Итого; кнопки «Изменить» / «Вернуть в активные» — только когда
+ *     переданы обработчики (история текущей смены). Для заказов
+ *     закрытых смен — чистый чек.
+ *
+ * Props (совместимы со старым компонентом): visible, order, paidMode,
+ * onClose, onReopen, onEdit.
  */
+
+/* ── строка позиции (общая для активного и чека) ── */
+function PosRow({ item, currency, editable, onTap, onDelete }) {
+  const served = !!item.served
+  const inner = (
+    <>
+      {editable && (
+        <span className={`uo-pos-served${served ? ' uo-pos-served--on' : ''}`} aria-hidden>
+          {served && <CheckIcon width={15} height={15} />}
+        </span>
+      )}
+      <span className="uo-pos-main">
+        <span className={`uo-pos-title${editable && served ? ' uo-pos-title--served' : ''}`}>
+          {item.title}
+        </span>
+        <span className="uo-pos-price">
+          {formatMoney(item.price, currency)} × {item.quantity}
+        </span>
+        {item.comment && <span className="uo-pos-note">{item.comment}</span>}
+      </span>
+      <span className="uo-pos-sum">{formatMoney(item.total_price, currency)}</span>
+      {editable && onDelete && (
+        <span
+          className="uo-pos-del"
+          role="button"
+          aria-label="Удалить позицию"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+        >
+          <TrashIcon width={17} height={17} />
+        </span>
+      )}
+    </>
+  )
+  if (!editable) return <div className="uo-pos">{inner}</div>
+  return (
+    <button type="button" className="uo-pos uo-pos--tap" onClick={onTap}>
+      {inner}
+    </button>
+  )
+}
+
+function TotalRow({ label, value, big, onTap }) {
+  const cls = `uo-total${big ? ' uo-total--big' : ''}${onTap ? ' uo-total--tap' : ''}`
+  const inner = (
+    <>
+      <span className="uo-total-label">{label}</span>
+      <span className="uo-total-value">{value}</span>
+    </>
+  )
+  if (!onTap) return <div className={cls}>{inner}</div>
+  return (
+    <button type="button" className={cls} onClick={onTap}>
+      {inner}
+    </button>
+  )
+}
+
+/* ── «Свои чаевые» — ввод суммы (на базе .sheet) ── */
+function TipsModal({ total, currency, initial, onClose, onSave }) {
+  const [val, setVal] = useState(String(initial || ''))
+  const num = parseInt(String(val).replace(/[^\d]/g, ''), 10) || 0
+  const pct = total > 0 && num > 0 ? Math.round((num / total) * 100) : 0
+  return (
+    <div
+      className="sheet-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="sheet" role="dialog" aria-modal="true">
+        <header className="sheet-header">
+          <h3 className="sheet-title">Свои чаевые</h3>
+          <button className="sheet-close" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+        </header>
+        <div className="sheet-form">
+          <label className="uo-tip-label">Сумма, {currency === 'RUB' ? '₽' : currency}</label>
+          <input
+            className="uo-tip-input"
+            value={val}
+            inputMode="numeric"
+            placeholder="0"
+            autoFocus
+            onChange={(e) => setVal(e.target.value.replace(/[^\d]/g, ''))}
+          />
+          <div className="uo-tip-hint">
+            {num > 0
+              ? `≈ ${pct} % от счёта ${formatMoney(total, currency)}`
+              : `Счёт — ${formatMoney(total, currency)}`}
+          </div>
+          <div className="uo-tip-quick">
+            {[100, 200, 300, 500].map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="uo-tip-quick-chip"
+                onClick={() => setVal(String(s))}
+              >
+                {s} ₽
+              </button>
+            ))}
+          </div>
+          <div className="sheet-actions">
+            <button className="btn btn--ghost" onClick={onClose}>
+              Отмена
+            </button>
+            <button
+              className="btn btn--primary"
+              style={{ flex: 1 }}
+              disabled={num <= 0}
+              onClick={() => onSave(num)}
+            >
+              Сохранить
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function OrderDetailsSheet({
   visible = false,
   order = null,
@@ -40,19 +186,13 @@ export default function OrderDetailsSheet({
   const workplaceCurrency = useWorkplaceStore((s) => s.current()?.currency ?? 'RUB')
 
   const [busy, setBusy] = useState(false)
-  const [movePickerVisible, setMovePickerVisible] = useState(false)
-  // Prefill from the order's saved tips in paid mode so history can quickly
-  // correct a forgotten tip. The sheet remounts per order (key={order.id}),
-  // so this initializer runs fresh for each opened order.
-  const [tipsAmount, setTipsAmount] = useState(() =>
-    paidMode && order?.tips ? String(order.tips) : '',
-  )
-  // NOTE: tips reset on order change is handled by remounting via a
-  // key={order.id} at the call site (OrderHistoryView / Map), so no
-  // setState-in-effect is needed here.
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [split, setSplit] = useState(false)
+  const [tipsPct, setTipsPct] = useState(0) // 0 | 5 | 10 | 'custom'
+  const [tipsCustom, setTipsCustom] = useState(0)
+  const [tipsOpen, setTipsOpen] = useState(false)
 
-  // While the sheet is open, register a global overlay so the floating
-  // "Взять заказ" CTA hides — otherwise it overlaps "Оплатить"/"+ Позиции".
+  // Пока шит открыт — глобальный оверлей (FAB прячется).
   useEffect(() => {
     if (!visible) return undefined
     const ui = useUiStore.getState()
@@ -60,8 +200,8 @@ export default function OrderDetailsSheet({
     return () => ui.popOverlay()
   }, [visible])
 
-  // Fresh order from the store (fallback to prop for paid/history orders
-  // that may not be in the active orders list).
+  // Свежий заказ из стора (fallback на проп — заказы закрытых смен в
+  // сторе не живут).
   const liveOrder = useMemo(() => {
     const id = order?.id
     if (!id) return order
@@ -69,128 +209,103 @@ export default function OrderDetailsSheet({
   }, [orders, order])
 
   const currency = liveOrder?.currency || workplaceCurrency
-  const orderItems = liveOrder?.items || []
-  const canPay = orderItems.length > 0
-  const guestsCount = liveOrder?.guests_count || 1
+  const items = useMemo(() => liveOrder?.items || [], [liveOrder])
 
-  const tipsValue = useMemo(() => {
-    const n = Number(tipsAmount)
-    return Number.isFinite(n) && n > 0 ? n : 0
-  }, [tipsAmount])
+  const pos = items.reduce((s, i) => s + (i.quantity || 0), 0)
+  const served = items
+    .filter((i) => i.served)
+    .reduce((s, i) => s + (i.quantity || 0), 0)
+  const total = liveOrder?.total_price || 0
 
-  // Tips are recorded separately (waiter's earnings / shift tips) — they are
-  // NOT part of the order's cost, so "Сумма"/"К оплате"/"Итого" всегда равны
-  // стоимости позиций заказа. Чаевые показываем отдельной строкой. The input
-  // drives the displayed tips in both modes (in paid mode it's prefilled).
-  const orderTotal = liveOrder?.total_price || 0
-  const paidTips = tipsValue
-  // In history, allow saving an edited tip (e.g. a forgotten one).
-  const savedTips = Number(liveOrder?.tips) || 0
-  const tipsDirty = paidMode && tipsValue !== savedTips
+  const guests = useMemo(
+    () => [...new Set(items.map((i) => i.guest || 1))].sort((a, b) => a - b),
+    [items],
+  )
+  const canSplit = guests.length > 1
 
   const seconds = useLiveDuration(() => liveOrder?.created_at)
-  const openedAgo = formatDuration(seconds)
-  const closedAtLabel = liveOrder?.closed_at
-    ? new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(
-        new Date(liveOrder.closed_at * 1000),
-      )
-    : ''
+  const mins = Math.floor(seconds / 60)
 
-  if (!visible) return null
+  const tips =
+    tipsPct === 'custom'
+      ? tipsCustom
+      : Math.round((total * tipsPct) / 100 / 10) * 10
+
+  if (!visible || !liveOrder) return null
+
+  const title =
+    liveOrder.table_number != null ? `Стол №${liveOrder.table_number}` : 'Заказ без стола'
+
+  /* ── обработчики (store-логика прежняя) ── */
 
   const onToggleServed = async (item) => {
-    if (!order) return
     hapticImpact('light')
     try {
-      await useOrderStore.getState().toggleItemServed(order.id, item.id)
+      await useOrderStore.getState().toggleItemServed(liveOrder.id, item.id)
     } catch (e) {
       useUiStore.getState().toastError(e.message)
     }
   }
 
-  const onRemoveItem = async (item) => {
-    const ui = useUiStore.getState()
-    const ok = await ui.confirm({
-      title: 'Убрать позицию?',
-      message: `«${item.title}» будет удалена из заказа.`,
-      confirmText: 'Убрать',
-      danger: true,
-    })
-    if (!ok) return
+  const onServeAll = async () => {
+    if (busy) return
+    hapticImpact('light')
     setBusy(true)
     try {
-      await useOrderStore.getState().removeOrderItem(item.id)
+      const store = useOrderStore.getState()
+      const pending = items.filter((i) => !i.served)
+      for (const i of pending) {
+        await store.updateOrderItem(i.id, { served: true })
+      }
     } catch (e) {
-      ui.toastError(e.message)
+      useUiStore.getState().toastError(e.message)
     } finally {
       setBusy(false)
     }
   }
 
-  // Quick-save tips on a closed order (history) without the full edit flow.
-  const onSaveTips = async () => {
-    if (!order || busy) return
+  const onDeleteItem = async (item) => {
+    const ui = useUiStore.getState()
+    const last = items.length === 1
+    const ok = await ui.confirm({
+      title: 'Удалить позицию?',
+      message: last
+        ? `«${item.title}» — последняя позиция. Вместе с ней будет удалён весь заказ.`
+        : `«${item.title}» × ${item.quantity} — ${formatMoney(item.total_price, currency)}. Позиция будет убрана из заказа.`,
+      confirmText: 'Удалить',
+      danger: true,
+    })
+    if (!ok) return
     setBusy(true)
     try {
-      await useOrderStore.getState().editPaidOrder(order.id, { tips: tipsValue })
-      useUiStore.getState().toastSuccess('Чаевые сохранены')
+      if (last) {
+        await useOrderStore.getState().deleteOrder(liveOrder.id)
+        ui.toastSuccess('Последняя позиция удалена — заказ закрыт')
+        onClose?.()
+      } else {
+        await useOrderStore.getState().removeOrderItem(item.id)
+      }
     } catch (e) {
-      useUiStore.getState().toastError(e.message)
+      ui.toastError(e.message)
     } finally {
       setBusy(false)
     }
   }
 
   const onAddItems = () => {
-    if (!order) return
     onClose?.()
-    navigate(`/order-builder?add_to_order=${encodeURIComponent(order.id)}`)
+    navigate(`/order-builder?add_to_order=${encodeURIComponent(liveOrder.id)}`)
   }
 
   const onPay = async () => {
-    if (!order || busy) return
-    const ui = useUiStore.getState()
-    const amountLabel = formatMoney(orderTotal, currency)
-    const tipsLine =
-      tipsValue > 0
-        ? ` Чаевые ${formatMoney(tipsValue, currency)} будут записаны отдельно.`
-        : ''
-    const ok = await ui.confirm({
-      title: 'Подтвердить оплату?',
-      message: `К оплате: ${amountLabel}.${tipsLine} После подтверждения заказ закроется и стол освободится.`,
-      confirmText: 'Подтвердить',
-    })
-    if (!ok) return
+    if (busy || items.length === 0) return
     setBusy(true)
     try {
-      await useOrderStore.getState().payOrder(order.id, { tips: tipsValue })
-      ui.toastSuccess('Заказ оплачен')
-      onClose?.()
-    } catch (e) {
-      ui.toastError(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const onMove = () => {
-    if (!order) return
-    setMovePickerVisible(true)
-  }
-
-  // Pick a target table to move (or detach) the order.
-  const onPickMoveTable = async (tableId) => {
-    setMovePickerVisible(false)
-    if (!order) return
-    setBusy(true)
-    try {
-      const updated = await useOrderStore.getState().moveOrder(order.id, tableId)
+      await useOrderStore.getState().payOrder(liveOrder.id, { tips })
       useUiStore
         .getState()
         .toastSuccess(
-          tableId
-            ? `Перенесено · стол №${updated.table_number}`
-            : 'Заказ откреплён от стола',
+          `Оплачено ${formatMoney(total + tips, currency)}${tips > 0 ? `, чаевые ${formatMoney(tips, currency)}` : ''}`,
         )
       onClose?.()
     } catch (e) {
@@ -200,8 +315,27 @@ export default function OrderDetailsSheet({
     }
   }
 
-  const onDelete = async () => {
-    if (!order) return
+  const onPickMove = async (tableId) => {
+    setMoveOpen(false)
+    if (tableId === (liveOrder.table_id || null)) return // тот же стол
+    setBusy(true)
+    try {
+      const updated = await useOrderStore.getState().moveOrder(liveOrder.id, tableId)
+      useUiStore
+        .getState()
+        .toastSuccess(
+          tableId != null
+            ? `Заказ перенесён на стол №${updated.table_number}`
+            : 'Заказ снят со стола',
+        )
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onDeleteOrder = async () => {
     const ui = useUiStore.getState()
     const ok = await ui.confirm({
       title: 'Удалить заказ?',
@@ -212,7 +346,7 @@ export default function OrderDetailsSheet({
     if (!ok) return
     setBusy(true)
     try {
-      await useOrderStore.getState().deleteOrder(order.id)
+      await useOrderStore.getState().deleteOrder(liveOrder.id)
       ui.toastSuccess('Заказ удалён')
       onClose?.()
     } catch (e) {
@@ -222,227 +356,289 @@ export default function OrderDetailsSheet({
     }
   }
 
-  const onOverlayClick = (e) => {
-    if (e.target === e.currentTarget) onClose?.()
+  // Правка чаевых закрытого заказа — та же модалка «Свои чаевые».
+  const onSavePaidTips = async (value) => {
+    setTipsOpen(false)
+    setBusy(true)
+    try {
+      await useOrderStore.getState().editPaidOrder(liveOrder.id, { tips: value })
+      useUiStore.getState().toastSuccess('Чаевые сохранены')
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
-  // Single order line (shared by flat list and per-guest groups).
-  const renderOrderItem = (i) => (
-    <li key={i.id} className={i.served ? 'ods-item ods-item--served' : 'ods-item'}>
-      <button
-        className={i.served ? 'ods-served ods-served--on' : 'ods-served'}
-        aria-label={i.served ? 'Не подано' : 'Подано'}
-        onClick={() => onToggleServed(i)}
-      >
-        {i.served && (
-          <svg
-            viewBox="0 0 24 24"
-            width="14"
-            height="14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </button>
-      <div className="ods-item-main">
-        <div className="ods-item-title">
-          <span>{i.title}</span>
-          <span className="ods-item-qty">× {i.quantity}</span>
-        </div>
-        {i.comment && <div className="ods-item-comment">💬 {i.comment}</div>}
+  const guestsLabel = `${liveOrder.guests_count || 1} ${pluralize(liveOrder.guests_count || 1, ['гость', 'гостя', 'гостей'])}`
+
+  const rows = (list, editable) =>
+    list.map((it, k) => (
+      <div key={it.id ?? k} className="uo-pos-wrap">
+        <PosRow
+          item={it}
+          currency={currency}
+          editable={editable}
+          onTap={() => onToggleServed(it)}
+          onDelete={() => onDeleteItem(it)}
+        />
       </div>
-      <div className="ods-item-price">{formatMoney(i.total_price, currency)}</div>
-      {!paidMode && (
-        <button
-          className="ods-item-remove"
-          disabled={busy}
-          aria-label="Удалить позицию"
-          onClick={() => onRemoveItem(i)}
-        >
-          ×
-        </button>
-      )}
-    </li>
-  )
+    ))
 
-  return (
-    <>
-    <div className="sheet-overlay" onClick={onOverlayClick}>
-      <div className="sheet ods-sheet" role="dialog" aria-modal="true">
-        <header className="sheet-header">
-          <div className="ods-header-main">
-            <h3 className="sheet-title">
-              {liveOrder?.table_number
-                ? `Стол №${liveOrder.table_number}`
-                : 'Заказ без стола'}
-            </h3>
-            {liveOrder && (
-              <span className="ods-meta">
-                {paidMode
-                  ? `✓ Закрыт ${closedAtLabel} · ${formatMoney(liveOrder.total_price, currency)}`
-                  : `⏱ ${openedAgo} · ${formatMoney(liveOrder.total_price, currency)}`}
-              </span>
-            )}
+  /* ── чек (закрытый заказ) ── */
+  if (paidMode) {
+    const canAct = !!(onReopen || onEdit)
+    return (
+      <>
+        <WnSheet title={title} onClose={onClose}>
+          <div className="uo-paid-head">
+            <span className="uo-paid-chip">Оплачен в {formatTime(liveOrder.closed_at)}</span>
+            <span className="uo-paid-meta">
+              {liveOrder.hall_name ? `${liveOrder.hall_name} · ` : ''}
+              {guestsLabel}
+            </span>
           </div>
-          <button className="sheet-close" onClick={() => onClose?.()}>
-            ×
-          </button>
-        </header>
 
-        <div className="ods-content">
-          {liveOrder?.comments && (
-            <div className="ods-comments">
-              <span className="ods-comments-label">💬 Комментарий</span>
-              <p>{liveOrder.comments}</p>
+          {liveOrder.comments && (
+            <div className="uo-comment" style={{ marginTop: 10 }}>
+              <div className="uo-comment-label">Комментарий</div>
+              <div className="uo-comment-text">{liveOrder.comments}</div>
             </div>
           )}
 
-          {orderItems.length > 0 ? (
-            guestsCount <= 1 ? (
-              <ul className="ods-items">{orderItems.map(renderOrderItem)}</ul>
-            ) : (
-              Array.from({ length: guestsCount }, (_, gi) => gi + 1).map((g) => {
-                const guestItems = orderItems.filter((it) => (it.guest || 1) === g)
-                if (guestItems.length === 0) return null
-                const subtotal = guestItems.reduce((s, it) => s + (it.total_price || 0), 0)
-                return (
-                  <div className="cc-guest-group" key={g}>
-                    <div className="cc-guest-head">
-                      <span className="cc-guest-name">
-                        <span className="cc-guest-badge">{g}</span>
-                        Гость {g}
-                      </span>
-                      <span className="cc-guest-subtotal">
-                        {formatMoney(subtotal, currency)}
-                      </span>
-                    </div>
-                    <ul className="ods-items">{guestItems.map(renderOrderItem)}</ul>
-                  </div>
-                )
-              })
-            )
-          ) : (
-            liveOrder && (
-              <div className="ods-empty-items">
-                <p>В этом заказе пока нет позиций.</p>
-              </div>
-            )
-          )}
+          <div style={{ marginTop: 10 }}>{rows(items, false)}</div>
 
-          {orderItems.length > 0 && (
-            <div className="ods-tips-row">
-              <label className="ods-tips-label">Чаевые</label>
-              <div className="ods-tips-input-wrap">
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  placeholder="0"
-                  className="ods-tips-input"
-                  value={tipsAmount}
-                  onChange={(e) => setTipsAmount(e.target.value)}
-                />
-                <span className="ods-tips-currency">{currency}</span>
-              </div>
-              {tipsDirty && (
+          <div className="uo-divider" style={{ margin: '10px 0 2px' }} aria-hidden />
+          <TotalRow
+            label="Чаевые"
+            value={
+              (Number(liveOrder.tips) || 0) > 0
+                ? `+${formatMoney(liveOrder.tips, currency)}`
+                : onEdit
+                  ? 'Добавить'
+                  : formatMoney(0, currency)
+            }
+            onTap={onEdit ? () => setTipsOpen(true) : undefined}
+          />
+          <TotalRow big label="Итого" value={formatMoney(total, currency)} />
+
+          {canAct && (
+            <div className="uo-paid-actions">
+              {onEdit && (
                 <button
-                  className="ods-tips-save"
-                  onClick={onSaveTips}
+                  type="button"
+                  className="uo-ghost"
                   disabled={busy}
+                  onClick={() => onEdit(liveOrder)}
                 >
-                  {busy ? '…' : 'Сохранить'}
+                  Изменить
+                </button>
+              )}
+              {onReopen && (
+                <button
+                  type="button"
+                  className="uo-ghost uo-ghost--accent"
+                  disabled={busy}
+                  onClick={() => onReopen(liveOrder)}
+                >
+                  Вернуть в активные
                 </button>
               )}
             </div>
           )}
+        </WnSheet>
+        {tipsOpen && (
+          <TipsModal
+            total={total}
+            currency={currency}
+            initial={Number(liveOrder.tips) || ''}
+            onClose={() => setTipsOpen(false)}
+            onSave={onSavePaidTips}
+          />
+        )}
+      </>
+    )
+  }
 
-          {orderItems.length > 0 && (
-            <div className="ods-totals">
-              <div className="ods-totals-row">
-                <span>Заказ</span>
-                <span className="ods-totals-value">
-                  {formatMoney(orderTotal, currency)}
-                </span>
-              </div>
-              {paidTips > 0 && (
-                <div className="ods-totals-row ods-totals-row--small">
-                  <span>Чаевые (отдельно)</span>
-                  <span className="ods-totals-value">
-                    {formatMoney(paidTips, currency)}
-                  </span>
+  /* ── активный заказ ── */
+  return (
+    <>
+      <WnSheet title={title} onClose={onClose}>
+        <div className="uo-meta">
+          {liveOrder.hall_name ? `${liveOrder.hall_name} · ` : ''}
+          открыт в {formatTime(liveOrder.created_at)} ·{' '}
+          <span className={mins > 30 ? 'uo-meta-warn' : undefined}>{mins} мин</span> ·{' '}
+          {guestsLabel}
+        </div>
+
+        <div className="uo-progress-wrap">
+          <div className="uo-progress-head">
+            <span className="uo-progress-label">Позиции</span>
+            <span
+              className={`uo-progress-count${pos > 0 && served >= pos ? ' uo-progress-count--all' : ''}`}
+            >
+              {pos > 0 && served >= pos ? 'подано всё' : `подано ${served} из ${pos}`}
+            </span>
+          </div>
+          <div className="uo-progress-track">
+            <div
+              className="uo-progress-fill"
+              style={{ width: `${pos ? (served / pos) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+
+        {split && canSplit ? (
+          guests.map((g) => {
+            const mine = items.filter((i) => (i.guest || 1) === g)
+            const sub = mine.reduce((s, i) => s + (i.total_price || 0), 0)
+            return (
+              <div key={g} className="uo-guest">
+                <div className="uo-guest-head">
+                  <span className="uo-guest-badge">{g}</span>
+                  <span className="uo-guest-name">Гость {g}</span>
+                  <span className="uo-guest-sum">{formatMoney(sub, currency)}</span>
                 </div>
-              )}
-              <div className="ods-totals-row ods-totals-row--main">
-                <span>{paidMode ? 'Итого по заказу' : 'К оплате'}</span>
-                <span className="ods-totals-value">
-                  {formatMoney(orderTotal, currency)}
-                </span>
+                <div className="uo-guest-list">{rows(mine, true)}</div>
               </div>
-            </div>
+            )
+          })
+        ) : (
+          <div className="uo-list">{rows(items, true)}</div>
+        )}
+
+        {liveOrder.comments && (
+          <div className="uo-comment">
+            <div className="uo-comment-label">Комментарий</div>
+            <div className="uo-comment-text">{liveOrder.comments}</div>
+          </div>
+        )}
+
+        <div className="uo-actions">
+          <button
+            type="button"
+            className="uo-ghost uo-ghost--accent"
+            disabled={busy}
+            onClick={onAddItems}
+          >
+            <PlusIcon width={17} height={17} /> Добавить позиции
+          </button>
+          <button
+            type="button"
+            className="uo-ghost"
+            disabled={busy}
+            onClick={() => setMoveOpen(true)}
+          >
+            <span className="uo-ghost-ico" aria-hidden>
+              <MapIcon width={17} height={17} />
+            </span>{' '}
+            Другой стол
+          </button>
+        </div>
+
+        {canSplit && (
+          <div className="uo-split">
+            <span className="uo-split-main">
+              <span className="uo-split-title">Разделить счёт по гостям</span>
+              <span className="uo-split-sub">
+                {split
+                  ? 'Подытоги по каждому гостю'
+                  : `${guests.length} ${pluralize(guests.length, ['гость', 'гостя', 'гостей'])} — один счёт`}
+              </span>
+            </span>
+            <button
+              type="button"
+              className={`uo-switch${split ? ' uo-switch--on' : ''}`}
+              role="switch"
+              aria-checked={split}
+              aria-label="Разделить счёт по гостям"
+              onClick={() => setSplit((v) => !v)}
+            />
+          </div>
+        )}
+
+        <div className="uo-divider" aria-hidden />
+        <TotalRow big label="Итого" value={formatMoney(total, currency)} />
+
+        <div className="uo-tips">
+          <span className="uo-tips-label">Чаевые</span>
+          {[
+            [0, 'Без'],
+            [5, '5 %'],
+            [10, '10 %'],
+          ].map(([p, l]) => (
+            <button
+              key={p}
+              type="button"
+              className={`uo-tips-chip${tipsPct === p ? ' uo-tips-chip--on' : ''}`}
+              onClick={() => setTipsPct(p)}
+            >
+              {l}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`uo-tips-chip${tipsPct === 'custom' ? ' uo-tips-chip--on' : ''}`}
+            onClick={() => setTipsOpen(true)}
+          >
+            {tipsPct === 'custom' ? `${tipsCustom} ₽` : 'Свои'}
+          </button>
+          {tips > 0 && (
+            <span className="uo-tips-sum">+{formatMoney(tips, currency)}</span>
           )}
         </div>
 
-        {!paidMode ? (
-          <>
-            <footer className="ods-footer">
-              <button className="btn btn--ghost" onClick={onAddItems} disabled={busy}>
-                + Позиции
-              </button>
-              <button
-                className="btn btn--primary"
-                disabled={busy || !canPay}
-                onClick={onPay}
-              >
-                {busy ? '…' : 'Оплатить'}
-              </button>
-            </footer>
-            <div className="ods-more">
-              <button className="ods-more-btn" onClick={onMove} disabled={busy}>
-                Перенести на другой стол
-              </button>
-              <button
-                className="ods-more-btn ods-more-btn--danger"
-                onClick={onDelete}
-                disabled={busy}
-              >
-                Удалить заказ
-              </button>
-            </div>
-          </>
-        ) : (
-          <footer className="ods-footer">
+        <div className="uo-footer">
+          {served < pos && (
             <button
-              className="btn btn--ghost"
-              onClick={() => onEdit?.(order)}
+              type="button"
+              className="uo-serve-all"
               disabled={busy}
+              onClick={onServeAll}
             >
-              ✏️ Изменить
+              Подать всё
             </button>
-            <button
-              className="btn btn--primary"
-              onClick={() => onReopen?.(order)}
-              disabled={busy}
-            >
-              ↩ Вернуть в активные
-            </button>
-          </footer>
-        )}
-      </div>
-    </div>
+          )}
+          <button
+            type="button"
+            className="uo-pay"
+            disabled={busy || items.length === 0}
+            onClick={onPay}
+          >
+            {busy ? '…' : `Оплатить ${formatMoney(total + tips, currency)}`}
+          </button>
+        </div>
 
-    <TablePickerSheet
-      visible={movePickerVisible}
-      currentTableId={order?.table_id || null}
-      freeOnly={true}
-      onClose={() => setMovePickerVisible(false)}
-      onSelect={onPickMoveTable}
-    />
+        <button
+          type="button"
+          className="uo-delete-order"
+          disabled={busy}
+          onClick={onDeleteOrder}
+        >
+          Удалить заказ
+        </button>
+      </WnSheet>
+
+      <TablePickerSheet
+        visible={moveOpen}
+        currentTableId={liveOrder.table_id || null}
+        freeOnly
+        onClose={() => setMoveOpen(false)}
+        onSelect={onPickMove}
+      />
+      {tipsOpen && (
+        <TipsModal
+          total={total}
+          currency={currency}
+          initial={tipsPct === 'custom' ? tipsCustom : ''}
+          onClose={() => setTipsOpen(false)}
+          onSave={(v) => {
+            setTipsCustom(v)
+            setTipsPct('custom')
+            setTipsOpen(false)
+          }}
+        />
+      )}
     </>
   )
 }

@@ -2,6 +2,7 @@ import { useLocation, useNavigate, useMatches } from 'react-router-dom'
 import { useShiftStore } from '@/stores/shift'
 import { useWorkplaceStore } from '@/stores/workplace'
 import { useUiStore } from '@/stores/ui'
+import { PlusIcon } from '@/components/menu/menuIcons'
 
 /**
  * Floating primary CTA: "Взять заказ" (shift open) or "Открыть смену".
@@ -39,15 +40,18 @@ export default function PrimaryAction() {
     (s) => s.overlayCount > 0 || !!s.confirmDialog || !!s.promptDialog,
   )
 
+  // На Главной при закрытой смене FAB не показываем — там CTA-карточка
+  // «Открыть» (прототип waiter-note-unified). На Карте прежнее поведение.
   const visible =
     !hideBottomNav &&
     SHOW_ON_PATHS.has(location.pathname) &&
     !!currentId &&
-    !overlayOpen
+    !overlayOpen &&
+    (isOpen || location.pathname !== '/home')
 
   if (!visible) return null
 
-  const label = isOpen ? '➕ Взять заказ' : '▶ Открыть смену'
+  const label = isOpen ? 'Взять заказ' : 'Открыть смену'
 
   const onClick = () => {
     if (isOpen) {
@@ -66,6 +70,7 @@ export default function PrimaryAction() {
       }
       onClick={onClick}
     >
+      {isOpen && <PlusIcon width={18} height={18} />}
       <span className="primary-action-label">{label}</span>
     </button>
   )

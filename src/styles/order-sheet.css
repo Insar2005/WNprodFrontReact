@@ -1,0 +1,542 @@
+/* ==========================================================================
+   Карточка заказа (uo-*) + перенос стола (uo-mv-*) + свои чаевые (uo-tip-*)
+   + история заказов (ohs-*) — июль 2026, прототип waiter-note-unified
+   (unified-prototype/order-sheet.jsx, orders-history-redesign/).
+   ЕДИНСТВЕННЫЙ источник стилей; старые ods- и oh- из global.css УДАЛЕНЫ.
+   Значения 1:1 из прототипа.
+   ========================================================================== */
+
+/* ── мета-строка под заголовком шита ── */
+.uo-meta {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  margin: 0 2px;
+}
+.uo-meta-warn { color: var(--wn-warn); font-weight: 500; }
+
+/* ── «ПОЗИЦИИ» + подано + прогресс ── */
+.uo-progress-wrap { margin: 14px 2px 0; }
+.uo-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.uo-progress-label {
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+}
+.uo-progress-count {
+  color: var(--wn-ink-mute);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.uo-progress-count--all { color: var(--wn-accent-text); }
+.uo-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--wn-bg-recessed);
+  overflow: hidden;
+}
+.uo-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--wn-accent);
+  transition: width 250ms var(--wn-ease);
+}
+
+/* ── ряд позиции ── */
+.uo-list { margin-top: 6px; }
+.uo-pos-wrap + .uo-pos-wrap { border-top: 1px solid var(--wn-glass-border-subtle); }
+.uo-pos {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 8px;
+  margin: 0 -8px;
+  border-radius: 10px;
+  width: calc(100% + 16px);
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-pos--tap { cursor: pointer; }
+.uo-pos--tap:active { background: var(--wn-bg-recessed); }
+.uo-pos-served {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--wn-glass-border);
+  background: transparent;
+  color: #fff;
+  transition: background var(--wn-dur-fast) var(--wn-ease);
+}
+.uo-pos-served--on { border: none; background: var(--wn-accent); }
+.uo-pos-main { flex: 1; min-width: 0; }
+.uo-pos-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.uo-pos-title--served { color: var(--wn-ink-soft); }
+.uo-pos-price {
+  display: block;
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.uo-pos-note {
+  display: block;
+  font-size: 12px;
+  color: var(--wn-ink-soft);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.uo-pos-sum {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.uo-pos-del {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--wn-ink-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  margin-right: -4px;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-pos-del:active { background: var(--wn-bg-recessed); }
+
+/* ── split: группа гостя ── */
+.uo-guest {
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 12px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.uo-guest-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  background: var(--wn-accent-fill);
+}
+.uo-guest-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.uo-guest-name { font-size: 14px; font-weight: 600; color: var(--wn-accent-text); }
+.uo-guest-sum {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+.uo-guest-list { padding: 0 12px; }
+
+/* ── комментарий к заказу ── */
+.uo-comment {
+  background: var(--wn-bg-recessed);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.uo-comment-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+}
+.uo-comment-text {
+  font-size: 13px;
+  color: var(--wn-ink);
+  line-height: 1.4;
+  margin-top: 3px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── пара ghost-кнопок: добавить / другой стол ── */
+.uo-actions { display: flex; gap: 10px; margin-top: 14px; }
+.uo-ghost {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-ghost:active { background: var(--wn-bg-recessed); }
+.uo-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+.uo-ghost--accent { color: var(--wn-accent-text); font-weight: 600; }
+.uo-ghost-ico { color: var(--wn-ink-mute); display: inline-flex; }
+
+/* ── split-тумблер ── */
+.uo-split {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 2px;
+}
+.uo-split-main { flex: 1; min-width: 0; }
+.uo-split-title { display: block; font-size: 14px; font-weight: 500; color: var(--wn-ink); }
+.uo-split-sub { display: block; font-size: 12px; color: var(--wn-ink-mute); margin-top: 1px; }
+.uo-switch {
+  width: 46px;
+  height: 28px;
+  border-radius: 999px;
+  border: none;
+  background: var(--wn-bg-recessed);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  padding: 0;
+  transition: background var(--wn-dur-base) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--wn-bg-elevated);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform var(--wn-dur-base) var(--wn-ease);
+}
+.uo-switch--on { background: var(--wn-accent); }
+.uo-switch--on::after { transform: translateX(18px); }
+
+/* ── итоги ── */
+.uo-divider { height: 1px; background: var(--wn-glass-border-subtle); margin: 12px 0 2px; }
+.uo-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 0 0;
+  width: 100%;
+  border: none;
+  background: none;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-total-label { font-size: 13px; font-weight: 400; color: var(--wn-ink-soft); }
+.uo-total-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+}
+.uo-total--big .uo-total-label { font-size: 15px; font-weight: 600; color: var(--wn-ink); }
+.uo-total--big .uo-total-value { font-size: 20px; font-weight: 700; color: var(--wn-accent-text); }
+.uo-total--tap { cursor: pointer; }
+.uo-total--tap:active { opacity: 0.7; }
+
+/* ── чаевые-чипы ── */
+.uo-tips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.uo-tips-label { font-size: 13px; color: var(--wn-ink-soft); flex-shrink: 0; }
+.uo-tips-chip {
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--wn-dur-fast) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-tips-chip:active { background: var(--wn-bg-recessed); }
+.uo-tips-chip--on {
+  border-color: transparent;
+  background: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+}
+.uo-tips-chip--on:active { opacity: 0.85; }
+.uo-tips-sum {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── нижние кнопки ── */
+.uo-footer { display: flex; gap: 10px; margin-top: 16px; }
+.uo-serve-all {
+  flex: 1;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-serve-all:active { background: var(--wn-bg-recessed); }
+.uo-serve-all:disabled { opacity: 0.5; cursor: not-allowed; }
+.uo-pay {
+  flex: 1.5;
+  height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-pay:active { opacity: 0.85; }
+.uo-pay:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* «Удалить заказ» — страховка приложения (в прототипе заказ удаляется
+   последней позицией; кнопка сохранена, чтобы не кликать N раз) */
+.uo-delete-order {
+  width: 100%;
+  height: 44px;
+  margin-top: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: transparent;
+  color: var(--wn-danger);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-delete-order:active { background: var(--wn-bg-recessed); }
+
+/* ── чек (закрытый заказ) ── */
+.uo-paid-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px;
+  flex-wrap: wrap;
+}
+.uo-paid-chip {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wn-accent-text);
+  background: var(--wn-accent-fill);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.uo-paid-meta { font-size: 13px; color: var(--wn-ink-mute); }
+.uo-paid-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+/* Перенос стола идёт через TablePickerSheet (SVG-карта, tps-* в
+   global.css) — сетка uo-mv-* удалена, решение владельца. */
+
+/* ==========================================================================
+   Свои чаевые (uo-tip-*) — на базе .sheet
+   ========================================================================== */
+.uo-tip-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wn-ink-soft);
+  margin: 0 2px 6px;
+}
+.uo-tip-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: var(--wn-bg-recessed);
+  border: 1px solid var(--wn-glass-border-subtle);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  box-sizing: border-box;
+  font-family: inherit;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.uo-tip-input:focus { border-color: var(--wn-accent-soft); }
+.uo-tip-hint {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  margin: 8px 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.uo-tip-quick { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.uo-tip-quick-chip {
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+.uo-tip-quick-chip:active { background: var(--wn-bg-elevated); }
+
+/* ==========================================================================
+   История заказов (ohs-*) — лента по сменам
+   ========================================================================== */
+.ohs-page { padding: 0; padding-bottom: max(24px, var(--wn-safe-bottom, 0px), env(safe-area-inset-bottom)); }
+.ohs-header {
+  padding: 0 10px 12px 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ohs-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  color: var(--wn-accent-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ohs-back:active { background: var(--wn-bg-recessed); }
+
+/* История — полноэкранный роут (hideBottomNav → .app-content--full без
+   верхнего паддинга), поэтому шапка сама уходит из-под оверлея Telegram —
+   тот же контракт, что у .ob-header (order-builder.css). */
+html[data-tg-fullscreen='true'] .ohs-header {
+  padding-top: max(90px, calc(12px + var(--wn-safe-top)));
+}
+.ohs-head-main { min-width: 0; }
+.ohs-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--wn-ink); }
+.ohs-venue { font-size: 12px; color: var(--wn-ink-mute); margin-top: 1px; }
+.ohs-body { padding: 2px 16px 0; }
+
+.ohs-group { margin-bottom: 18px; }
+.ohs-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 8px;
+}
+.ohs-group-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ohs-report-link {
+  border: none;
+  background: none;
+  color: var(--wn-accent-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ohs-report-link:active { background: var(--wn-bg-recessed); }
+.ohs-group-card {
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 12px;
+  padding: 2px 14px;
+}
+.ohs-group-empty {
+  padding: 18px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+}
+.ohs-group-loading { display: flex; justify-content: center; padding: 18px 0; }
+.ohs-more {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-accent-soft);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-accent-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.ohs-more:active { background: var(--wn-bg-recessed); }

@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react'
 import { useWorkplaceStore } from '@/stores/workplace'
 import { useUiStore } from '@/stores/ui'
+import { ChevronDown, CheckIcon } from '@/components/menu/menuIcons'
+import '@/styles/home-shifts.css'
 
 /**
- * Workplace switcher in screen headers.
- * - 1 workplace → plain label.
- * - 2+ → tap-to-open dropdown.
+ * Переключатель заведения в шапках экранов — 1:1 из прототипа
+ * waiter-note-unified (home-screens.jsx HmHeader).
  *
- * Reactivity: select raw `items` + `currentId` and derive activeList/current
- * with useMemo (the store's activeList() getter would return a fresh array
- * each render — see the menu-store note from step 2).
+ *   • 1 заведение → просто лейбл (13 mute).
+ *   • 2+ → пилюля «название + шеврон» (шеврон крутится на 180°);
+ *     тап открывает выпадающее меню (elevated, radius 12, тень —
+ *     плавающий элемент), у текущего галочка accent-text. Клик по
+ *     подложке закрывает.
+ *
+ * Общий компонент: Главная, Карта, Заметки.
  */
 export default function WorkplaceSwitcher() {
   const items = useWorkplaceStore((s) => s.items)
@@ -39,42 +44,46 @@ export default function WorkplaceSwitcher() {
   }
 
   if (activeList.length <= 1) {
-    return <div className="switcher-label">{current?.title || 'Нет заведений'}</div>
+    return <span className="switcher-label">{current?.title || 'Нет заведений'}</span>
   }
 
   return (
     <div className="switcher">
-      <button className="switcher-trigger" onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className="switcher-trigger"
+        onClick={() => setOpen((v) => !v)}
+      >
         <span className="switcher-trigger-text">{current?.title || 'Выберите'}</span>
-        <span className={open ? 'switcher-chev switcher-chev--open' : 'switcher-chev'}>
-          ▾
+        <span className={`switcher-chev${open ? ' switcher-chev--open' : ''}`} aria-hidden>
+          <ChevronDown width={13} height={13} />
         </span>
       </button>
 
       {open && (
-        <div
-          className="switcher-menu"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false)
-          }}
-        >
-          <div className="switcher-menu-list">
-            {activeList.map((w) => (
-              <button
-                key={w.id}
-                className={
-                  w.id === currentId
-                    ? 'switcher-menu-item switcher-menu-item--current'
-                    : 'switcher-menu-item'
-                }
-                onClick={() => select(w.id)}
-              >
-                <span className="switcher-menu-item-text">{w.title}</span>
-                {w.id === currentId && <span className="switcher-menu-check">✓</span>}
-              </button>
-            ))}
+        <>
+          <div className="switcher-backdrop" onClick={() => setOpen(false)} />
+          <div className="switcher-menu">
+            {activeList.map((w) => {
+              const on = w.id === currentId
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  className={`switcher-item${on ? ' switcher-item--current' : ''}`}
+                  onClick={() => select(w.id)}
+                >
+                  <span className="switcher-item-text">{w.title}</span>
+                  {on && (
+                    <span className="switcher-check" aria-hidden>
+                      <CheckIcon width={16} height={16} />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
-        </div>
+        </>
       )}
     </div>
   )

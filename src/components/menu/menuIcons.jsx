@@ -87,6 +87,68 @@ export function CloseIcon({ width = 16, height = 16, ...props }) {
   )
 }
 
+/** Bell — nearest reminder row on the Home screen. */
+export function BellIcon({ width = 19, height = 19, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  )
+}
+
+/** Check — reminder done, selected venue in the switcher. */
+export function CheckIcon({ width = 16, height = 16, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="M5 12.5 10 17.5 19 7" />
+    </svg>
+  )
+}
+
+/** Chevron down — venue switcher pill (rotates 180° when open). */
+export function ChevronDown({ width = 13, height = 13, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="m5 9 7 7 7-7" />
+    </svg>
+  )
+}
+
+/** Share (tray + arrow up) — «Поделиться отчётом» in the shift report. */
+export function ShareIcon({ width = 19, height = 19, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="M12 14V3" />
+      <path d="m8.5 6.5 3.5-3.5 3.5 3.5" />
+      <path d="M7 10H5.5a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5H17" />
+    </svg>
+  )
+}
+
+/** Trash — удаление позиции из заказа (карточка заказа). */
+export function TrashIcon({ width = 17, height = 17, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      <path d="M6.5 7 7.4 19a1 1 0 0 0 1 .93h7.2a1 1 0 0 0 1-.93L17.5 7" />
+      <path d="M10 11v5M14 11v5" />
+    </svg>
+  )
+}
+
+/** Map/tables — «Другой стол» в карточке заказа (геометрия nav-иконки Карта). */
+export function MapIcon({ width = 17, height = 17, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <rect x="3" y="9" width="3" height="6" rx="0.8" />
+      <rect x="18" y="9" width="3" height="6" rx="0.8" />
+      <rect x="7.5" y="6" width="9" height="12" rx="1.5" />
+    </svg>
+  )
+}
+
 /** Chair — table plate in the order cart (replaces the 🪑 emoji). */
 export function ChairIcon({ width = 18, height = 18, ...props }) {
   return (
