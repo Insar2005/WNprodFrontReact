@@ -150,7 +150,7 @@ export default function Notes() {
             </label>
           )}
         </div>
-        <WorkplaceSwitcher />
+        {/* <WorkplaceSwitcher /> */}
       </header>
 
       <div className="search-wrap">

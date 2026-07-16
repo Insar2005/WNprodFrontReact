@@ -2,31 +2,31 @@ import { useState } from 'react'
 import { useHallStore } from '@/stores/hall'
 import { useUiStore } from '@/stores/ui'
 import { newId } from '@/utils/nanoid'
-import BottomSheet from '@/components/BottomSheet'
-
-function pluralize(n, forms) {
-  const a = Math.abs(n) % 100
-  const b = a % 10
-  if (a > 10 && a < 20) return forms[2]
-  if (b > 1 && b < 5) return forms[1]
-  if (b === 1) return forms[0]
-  return forms[2]
-}
-function formatDate(ts) {
-  if (!ts) return ''
-  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(
-    new Date(ts * 1000),
-  )
-}
+import { pluralize } from '@/utils/pluralize'
+import WnSheet from '@/components/WnSheet'
+import { PlusIcon, DotsIcon } from '@/components/menu/menuIcons'
 
 /**
- * Saved table arrangements (templates). (Was HallLayoutsPanel.vue.)
- * Built on the React BottomSheet (header + children props).
- * $emit('close'|'applied') → onClose / onApplied.
+ * Шаблоны зала — 1:1 EdTemplatesSheet из прототипа (editor-ui.jsx) на
+ * общем WnSheet: «Сохранить текущую расстановку как шаблон» → prompt
+ * имени; ряды «Название / дата · N столов» + «Применить» + меню «…»
+ * (Переименовать/Удалить).
+ *
+ * Логика прежняя (не регрессировать): createLayout, умное applyLayout
+ * (confirm про «лишние» столы; занятые заказами не удаляются; тост-итог
+ * «+N новых, M переставлены, −K»), renameLayout, removeLayout.
  */
-export default function HallLayoutsPanel({ visible = false, onClose, onApplied }) {
+const fmtDate = (ts) =>
+  ts
+    ? new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(
+        new Date(ts * 1000),
+      )
+    : ''
+
+export default function HallLayoutsPanel({ onClose, onApplied }) {
   const layouts = useHallStore((s) => s.layouts)
   const [busy, setBusy] = useState(false)
+  const [menuFor, setMenuFor] = useState(null)
 
   const onSaveCurrent = async () => {
     const hall = useHallStore.getState()
@@ -154,75 +154,64 @@ export default function HallLayoutsPanel({ visible = false, onClose, onApplied }
     }
   }
 
-  const header = (
-    <div className="hlp-header">
-      <h2 className="hlp-title">Шаблоны расстановки</h2>
-      <button className="hlp-close" onClick={() => onClose?.()} aria-label="Закрыть">
-        ×
-      </button>
-    </div>
-  )
-
   return (
-    <BottomSheet
-      visible={visible}
-      snapPoints={[280, 0.55]}
-      initialSnap={0}
-      header={header}
-      onClose={onClose}
-    >
-      <div className="hlp-body">
-        <button
-          className="hlp-action hlp-action--save"
-          disabled={busy}
-          onClick={onSaveCurrent}
-        >
-          💾 Сохранить текущую расстановку
-        </button>
+    <WnSheet title="Шаблоны зала" onClose={onClose}>
+      <button type="button" className="ed2-tpl-save" disabled={busy} onClick={onSaveCurrent}>
+        <PlusIcon width={17} height={17} /> Сохранить текущую расстановку как шаблон
+      </button>
 
-        {layouts.length === 0 ? (
-          <p className="hlp-empty">
-            Сохранённых шаблонов нет. Расставьте столы как нужно и сохраните —
-            потом можно будет вернуть в один тап.
-          </p>
-        ) : (
-          <ul className="hlp-list">
-            {layouts.map((l) => (
-              <li key={l.id} className="hlp-item">
-                <div className="hlp-info">
-                  <div className="hlp-name">{l.name}</div>
-                  <div className="hlp-meta">
-                    {l.positions?.length || 0}{' '}
-                    {pluralize(l.positions?.length || 0, ['стол', 'стола', 'столов'])} ·
-                    сохранён {formatDate(l.created_at)}
-                  </div>
-                </div>
-                <div className="hlp-actions">
-                  <button className="hlp-apply" disabled={busy} onClick={() => onApply(l)}>
-                    Применить
+      <div className="ed2-tpl-list">
+        {layouts.length === 0 && <div className="ed2-tpl-empty">Шаблонов пока нет</div>}
+        {layouts.map((tpl) => (
+          <div key={tpl.id} className="ed2-tpl-row">
+            <div className="ed2-tpl-main">
+              <div className="ed2-tpl-name">{tpl.name}</div>
+              <div className="ed2-tpl-meta">
+                {fmtDate(tpl.created_at)} · {(tpl.positions || []).length}{' '}
+                {pluralize((tpl.positions || []).length, ['стол', 'стола', 'столов'])}
+              </div>
+            </div>
+            <button type="button" className="ed2-tpl-apply" disabled={busy} onClick={() => onApply(tpl)}>
+              Применить
+            </button>
+            <button
+              type="button"
+              className="ed2-tpl-dots"
+              aria-label="Ещё"
+              onClick={() => setMenuFor(menuFor === tpl.id ? null : tpl.id)}
+            >
+              <DotsIcon width={18} height={18} />
+            </button>
+            {menuFor === tpl.id && (
+              <>
+                <div className="ed2-tpl-backdrop" onClick={() => setMenuFor(null)} />
+                <div className="ed2-tpl-menu">
+                  <button
+                    type="button"
+                    className="ed2-tpl-menu-item"
+                    onClick={() => {
+                      setMenuFor(null)
+                      onRename(tpl)
+                    }}
+                  >
+                    Переименовать
                   </button>
                   <button
-                    className="hlp-icon"
-                    disabled={busy}
-                    aria-label="Переименовать"
-                    onClick={() => onRename(l)}
+                    type="button"
+                    className="ed2-tpl-menu-item ed2-tpl-menu-item--danger"
+                    onClick={() => {
+                      setMenuFor(null)
+                      onDelete(tpl)
+                    }}
                   >
-                    ✏️
-                  </button>
-                  <button
-                    className="hlp-icon hlp-icon--danger"
-                    disabled={busy}
-                    aria-label="Удалить"
-                    onClick={() => onDelete(l)}
-                  >
-                    🗑
+                    Удалить
                   </button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              </>
+            )}
+          </div>
+        ))}
       </div>
-    </BottomSheet>
+    </WnSheet>
   )
 }

@@ -1,38 +1,55 @@
-import { useEffect, useRef, useState } from 'react'
-import BottomSheet from '@/components/BottomSheet'
+import { useEffect, useState } from 'react'
 import { useHallStore } from '@/stores/hall'
-import { useUiStore } from '@/stores/ui'
+import { TrashIcon } from '@/components/menu/menuIcons'
 
 /**
- * Live table editor. (Was TableEditPanel.vue.)
+ * Панель стола — 1:1 EdTablePanel из прототипа (map-redesign/editor-ui.jsx):
+ * низ-шит ≤48% (канвас виден), № — инпут 72×40 с проверкой конфликта,
+ * Ширина/Высота — слайдеры 32–220 шаг 4 с сохранением центра, Форма —
+ * пресеты Прямоугольник/Овал + слайдер скругления 0–100% шаг 5 (% от
+ * min(w,h)/2), Поворот — слайдер −180…180° шаг 5 + «Сбросить», футер
+ * Удалить/Дублировать/Готово.
  *
- * ── Vue → React notes ───────────────────────────────────────────────
- * - reactive(localTable) → useState object. The Vue `watch(table.id)` that
- *   re-seeds local state on a different table is replaced by a
- *   key={table.id} remount at the call site (HallEditorView), so this
- *   component always initializes fresh — no setState-in-effect.
- * - The deep `watch(localTable)` that patches hall.patchTableLocal on every
- *   tweak → a useEffect on the form fields (writes to the store, an external
- *   system — the allowed kind of effect).
- * - roundnessPercent is derived; setRoundness writes border_radius.
- * - onClose computes the diff vs the initial snapshot and emits commit.
- * - $emit('close'|'commit'|'delete'|'duplicate') → callback props.
- * ─────────────────────────────────────────────────────────────────────
+ * Механика прежняя (не регрессировать): live-правки пишутся в стор через
+ * patchTableLocal (канвас обновляется мгновенно), а при закрытии считается
+ * один суммарный patch → onCommit(id, patch, snapshot) — родитель делает
+ * PATCH на бэк и кладёт операцию в undo-стек.
  */
+/* строка-слайдер: label · range · значение (EdSlideRow из прототипа) */
+function Slide({ label, value, display, min, max, step, onChange }) {
+  return (
+    <div className="ed2-slide-row">
+      <span className="ed2-slide-label">{label}</span>
+      <input
+        type="range"
+        className="ed2-slide"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <span className="ed2-slide-val">{display}</span>
+    </div>
+  )
+}
+
 export default function TableEditPanel({
-  visible = false,
-  table = null,
+  table,
+  takenNumbers = [],
   onClose,
   onCommit,
   onDelete,
   onDuplicate,
 }) {
-  const [busy] = useState(false)
-
-  const initialSnapshot = useRef(
+  // Снапшот исходных значений — фиксируется на маунте (родитель ремаунтит
+  // панель по key=table.id), из него считается итоговый patch и undo.
+  const [snapshot] = useState(() =>
     table
       ? {
           number: table.number,
+          x: table.x,
+          y: table.y,
           width: table.width,
           height: table.height,
           rotation: table.rotation || 0,
@@ -40,241 +57,147 @@ export default function TableEditPanel({
         }
       : null,
   )
-
   const [form, setForm] = useState(() =>
-    table
-      ? {
-          number: table.number,
-          width: table.width,
-          height: table.height,
-          rotation: table.rotation || 0,
-          border_radius: table.border_radius ?? 16,
-        }
-      : { number: 1, width: 100, height: 100, rotation: 0, border_radius: 16 },
+    snapshot || { number: 1, x: 0, y: 0, width: 100, height: 100, rotation: 0, border_radius: 16 },
   )
+  const [numDraft, setNumDraft] = useState(String(form.number))
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  // Live-patch the hall store on every form change so the canvas updates.
+  // Live-patch стора на каждое движение — канвас обновляется живьём.
   const tableId = table?.id
   useEffect(() => {
     if (!tableId) return
     useHallStore.getState().patchTableLocal(tableId, {
       number: form.number,
+      x: form.x,
+      y: form.y,
       width: form.width,
       height: form.height,
       rotation: form.rotation,
       border_radius: form.border_radius,
     })
-  }, [tableId, form.number, form.width, form.height, form.rotation, form.border_radius])
+  }, [tableId, form])
+
+  const num = parseInt(numDraft, 10)
+  const conflict =
+    !Number.isNaN(num) && num !== snapshot?.number
+      ? takenNumbers.includes(num)
+      : false
+  const invalid = Number.isNaN(num) || conflict
+  const changeNum = (v) => {
+    setNumDraft(v)
+    const n = parseInt(v, 10)
+    if (!Number.isNaN(n) && !takenNumbers.includes(n)) setField('number', n)
+  }
 
   const minSide = Math.min(form.width, form.height)
-  const roundnessPercent =
-    minSide > 0 ? Math.round((form.border_radius / (minSide / 2)) * 100) : 0
-
-  const setRoundness = (percent) => {
-    const clamped = Math.max(0, Math.min(100, percent))
+  const pct =
+    minSide > 0
+      ? Math.round(((form.border_radius / (minSide / 2)) * 100) / 5) * 5
+      : 0
+  const setPct = (p) => {
+    const clamped = Math.max(0, Math.min(100, p))
     setField('border_radius', Math.round((minSide / 2) * (clamped / 100)))
   }
 
-  const formatRotation = (deg) => `${deg > 0 ? '+' : ''}${deg}°`
+  // Слайдеры W/H сохраняют центр стола и не дают br вылезти за min/2.
+  const setW = (v) =>
+    setForm((f) => ({
+      ...f,
+      width: v,
+      x: Math.round(f.x + (f.width - v) / 2),
+      border_radius: Math.min(f.border_radius, Math.min(v, f.height) / 2),
+    }))
+  const setH = (v) =>
+    setForm((f) => ({
+      ...f,
+      height: v,
+      y: Math.round(f.y + (f.height - v) / 2),
+      border_radius: Math.min(f.border_radius, Math.min(f.width, v) / 2),
+    }))
 
   const computePatch = () => {
-    const snap = initialSnapshot.current
     const patch = {}
-    if (!snap) return patch
+    if (!snapshot) return patch
     for (const key of Object.keys(form)) {
-      if (form[key] !== snap[key]) patch[key] = form[key]
+      if (form[key] !== snapshot[key]) patch[key] = form[key]
     }
     return patch
   }
-
   const handleClose = () => {
-    if (!table || !initialSnapshot.current) {
-      onClose?.()
-      return
-    }
-    const patch = computePatch()
-    if (Object.keys(patch).length > 0) {
-      onCommit?.(table.id, patch, { ...initialSnapshot.current })
+    if (table && snapshot) {
+      const patch = computePatch()
+      if (Object.keys(patch).length > 0) {
+        onCommit?.(table.id, patch, { ...snapshot, id: table.id, hall_id: table.hall_id })
+      }
     }
     onClose?.()
   }
 
-  const handleDelete = async () => {
-    if (!table) return
-    const ui = useUiStore.getState()
-    const ok = await ui.confirm({
-      title: `Удалить стол №${form.number}?`,
-      message: 'Действие можно отменить кнопкой ↶',
-      confirmText: 'Удалить',
-      danger: true,
-    })
-    if (!ok) return
-    // Restore original values in store before delete so undo re-creates the
-    // table with the pre-edit values, not this session's half-edits.
-    if (initialSnapshot.current) {
-      useHallStore.getState().patchTableLocal(table.id, initialSnapshot.current)
-    }
-    onDelete?.(table.id, table)
-    onClose?.()
-  }
-
-  const handleDuplicate = () => {
-    if (!table) return
-    const patch = computePatch()
-    if (Object.keys(patch).length > 0) {
-      onCommit?.(table.id, patch, { ...initialSnapshot.current })
-    }
-    const snapshot = {
-      hall_id: table.hall_id,
-      width: form.width,
-      height: form.height,
-      rotation: form.rotation,
-      border_radius: form.border_radius,
-      x: table.x,
-      y: table.y,
-    }
-    onDuplicate?.(snapshot)
-    onClose?.()
-  }
-
-  const header = (
-    <div className="tep-header">
-      <h3 className="tep-title">
-        <span>Стол №</span>
-        <input
-          className="tep-num-input"
-          type="number"
-          min="1"
-          aria-label="Номер стола"
-          value={form.number}
-          onChange={(e) => setField('number', Number(e.target.value) || 1)}
-        />
-      </h3>
-      <button className="tep-close" onClick={handleClose} aria-label="Закрыть">
-        ×
-      </button>
-    </div>
-  )
-
-  const footer = (
-    <div className="tep-footer">
-      <button className="btn btn--danger" onClick={handleDelete} disabled={busy}>
-        🗑 Удалить
-      </button>
-      <button className="btn btn--ghost" onClick={handleDuplicate} disabled={busy}>
-        📋 Копия
-      </button>
-      <button className="btn btn--primary" onClick={handleClose} disabled={busy}>
-        Готово
-      </button>
-    </div>
-  )
+  if (!table) return null
 
   return (
-    <BottomSheet
-      visible={visible}
-      snapPoints={[280, 0.55]}
-      initialSnap={0}
-      header={header}
-      footer={footer}
-    >
-      <div className="tep-form">
-        <div className="tep-field">
-          <div className="tep-field-row">
-            <span className="tep-label">Ширина</span>
-            <span className="tep-value">{form.width} px</span>
-          </div>
-          <input
-            type="range"
-            min={40}
-            max={300}
-            step={10}
-            className="tep-slider"
-            value={form.width}
-            onChange={(e) => setField('width', Number(e.target.value))}
-          />
-        </div>
+    <div className="ed2-panel">
+      <div className="ed2-panel-handle" aria-hidden />
+      <div className="ed2-panel-head">
+        <span className="ed2-panel-title">Стол №</span>
+        <input
+          className={`ed2-num-input${invalid ? ' ed2-num-input--bad' : ''}`}
+          inputMode="numeric"
+          value={numDraft}
+          aria-label="Номер стола"
+          onChange={(e) => changeNum(e.target.value.replace(/[^\d]/g, ''))}
+        />
+        {conflict && <span className="ed2-num-conflict">№ уже занят</span>}
+        <span className="ed2-panel-spacer" />
+        <button type="button" className="ed2-panel-close" onClick={handleClose} aria-label="Закрыть">
+          ×
+        </button>
+      </div>
 
-        <div className="tep-field">
-          <div className="tep-field-row">
-            <span className="tep-label">Высота</span>
-            <span className="tep-value">{form.height} px</span>
-          </div>
-          <input
-            type="range"
-            min={40}
-            max={300}
-            step={10}
-            className="tep-slider"
-            value={form.height}
-            onChange={(e) => setField('height', Number(e.target.value))}
-          />
-        </div>
+      <div className="ed2-panel-body">
+        <Slide label="Ширина" value={form.width} display={form.width} min={32} max={220} step={4} onChange={setW} />
+        <Slide label="Высота" value={form.height} display={form.height} min={32} max={220} step={4} onChange={setH} />
 
-        <div className="tep-field">
-          <div className="tep-field-row">
-            <span className="tep-label">Форма</span>
-            <span className="tep-value">{roundnessPercent}%</span>
-          </div>
-          <div className="tep-presets">
-            <button
-              type="button"
-              className={
-                roundnessPercent === 0 ? 'tep-preset tep-preset--active' : 'tep-preset'
-              }
-              onClick={() => setRoundness(0)}
-            >
-              <span className="tep-preset-icon" style={{ borderRadius: 0 }} />
-              <span>Прямоугольник</span>
-            </button>
-            <button
-              type="button"
-              className={
-                roundnessPercent === 100 ? 'tep-preset tep-preset--active' : 'tep-preset'
-              }
-              onClick={() => setRoundness(100)}
-            >
-              <span className="tep-preset-icon" style={{ borderRadius: '50%' }} />
-              <span>Овал/Круг</span>
-            </button>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            className="tep-slider"
-            value={roundnessPercent}
-            onChange={(e) => setRoundness(Number(e.target.value))}
-          />
+        {/* <div className="ed2-row-head">
+          <span className="ed2-lbl">Форма</span>
+          <span className="ed2-val">{pct}%</span>
         </div>
+        <div className="ed2-tiles">
+          <button type="button" className={`ed2-tile${pct === 0 ? ' ed2-tile--on' : ''}`} onClick={() => setPct(0)}>
+            <span className="ed2-tile-rect" aria-hidden /> Прямоугольник
+          </button>
+          <button type="button" className={`ed2-tile${pct === 100 ? ' ed2-tile--on' : ''}`} onClick={() => setPct(100)}>
+            <span className="ed2-tile-circle" aria-hidden /> Овал / Круг
+          </button>
+        </div> */}
+        <Slide label="Скругление" value={pct} display={`${pct}%`} min={0} max={100} step={5} onChange={setPct} />
 
-        <div className="tep-field">
-          <div className="tep-field-row">
-            <span className="tep-label">Поворот</span>
-            <span className="tep-value">{formatRotation(form.rotation)}</span>
-          </div>
-          <input
-            type="range"
-            min={-180}
-            max={180}
-            step={5}
-            className="tep-slider"
-            value={form.rotation}
-            onChange={(e) => setField('rotation', Number(e.target.value))}
-          />
-          {form.rotation !== 0 && (
-            <button
-              type="button"
-              className="tep-reset-link"
-              onClick={() => setField('rotation', 0)}
-            >
-              Сбросить поворот
-            </button>
-          )}
+        <div className="ed2-row-head" style={{ margin: '8px 0 0' }}>
+          <span className="ed2-lbl">Поворот</span>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            {form.rotation !== 0 && (
+              <button type="button" className="ed2-reset" onClick={() => setField('rotation', 0)}>
+                Сбросить
+              </button>
+            )}
+            <span className="ed2-val">{form.rotation}°</span>
+          </span>
+        </div>
+        <Slide label="Угол" value={form.rotation} display={`${form.rotation}°`} min={-180} max={180} step={5} onChange={(v) => setField('rotation', v)} />
+
+        <div className="ed2-actions">
+          <button type="button" className="ed2-act ed2-act--danger" onClick={() => onDelete?.(table.id, { ...table })}>
+            <TrashIcon width={16} height={16} /> Удалить
+          </button>
+          <button type="button" className="ed2-act" onClick={() => onDuplicate?.({ ...table })}>
+            Дублировать
+          </button>
+          <button type="button" className="ed2-act ed2-act--primary" onClick={handleClose}>
+            Готово
+          </button>
         </div>
       </div>
-    </BottomSheet>
+    </div>
   )
 }

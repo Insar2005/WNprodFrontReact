@@ -15,6 +15,7 @@ import {
   FitIcon,
   CheckIcon,
 } from '@/components/menu/menuIcons'
+import { tablesBBox } from '@/utils/hallGeometry'
 import '@/styles/map-editor.css'
 
 /**
@@ -40,30 +41,6 @@ import '@/styles/map-editor.css'
  * стола (orderByTable + fallback table.order_id), OrderDetailsSheet.
  */
 
-/* видимый bbox стола с произвольным поворотом вокруг центра */
-const visBox = (t) => {
-  const r = ((t.rotation || 0) * Math.PI) / 180
-  const c = Math.abs(Math.cos(r))
-  const s = Math.abs(Math.sin(r))
-  const bw = t.width * c + t.height * s
-  const bh = t.width * s + t.height * c
-  return { x: t.x + (t.width - bw) / 2, y: t.y + (t.height - bh) / 2, w: bw, h: bh }
-}
-const tablesBBox = (tables) => {
-  let x0 = 1e9
-  let y0 = 1e9
-  let x1 = -1e9
-  let y1 = -1e9
-  for (const t of tables) {
-    const v = visBox(t)
-    x0 = Math.min(x0, v.x)
-    y0 = Math.min(y0, v.y)
-    x1 = Math.max(x1, v.x + v.w)
-    y1 = Math.max(y1, v.y + v.h)
-  }
-  if (x0 > x1) return { x: 0, y: 0, w: 100, h: 100 }
-  return { x: x0 - 20, y: y0 - 20, w: x1 - x0 + 40, h: y1 - y0 + 40 }
-}
 const shortMoney = (n) => `${Math.round(n || 0).toLocaleString('ru-RU')} ₽`
 
 /* ── Стол ── */
@@ -160,14 +137,47 @@ function MpCanvas({ hall, tables, findOrder, shiftOpen, nowMs, pulseTableId, onT
       return { s: s2, tx: cx - (cx - v.tx) * k, ty: cy - (cy - v.ty) * k }
     })
 
+  const pointersRef = useRef(new Map())
+  const pinchRef = useRef(null)
+
   const down = (e) => {
     if (!view) return
-    dragRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty }
-    movedRef.current = false
-    setDragging(true)
     e.currentTarget.setPointerCapture(e.pointerId)
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointersRef.current.size === 2) {
+      // второй палец: pan → pinch (зум вокруг середины жеста)
+      const [p1, p2] = [...pointersRef.current.values()]
+      const rect = wrapRef.current.getBoundingClientRect()
+      pinchRef.current = {
+        dist: Math.hypot(p1.x - p2.x, p1.y - p2.y),
+        s: view.s,
+        wx: ((p1.x + p2.x) / 2 - rect.left - view.tx) / view.s,
+        wy: ((p1.y + p2.y) / 2 - rect.top - view.ty) / view.s,
+        left: rect.left,
+        top: rect.top,
+      }
+      dragRef.current = null
+      movedRef.current = true
+      setDragging(true)
+    } else if (pointersRef.current.size === 1) {
+      dragRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty }
+      movedRef.current = false
+      setDragging(true)
+    }
   }
   const move = (e) => {
+    if (!pointersRef.current.has(e.pointerId)) return
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const pinch = pinchRef.current
+    if (pinch && pointersRef.current.size >= 2) {
+      const [p1, p2] = [...pointersRef.current.values()]
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y)
+      const s2 = Math.min(2.5, Math.max(fitScaleRef.current * 0.6, (pinch.s * dist) / (pinch.dist || 1)))
+      const mx = (p1.x + p2.x) / 2 - pinch.left
+      const my = (p1.y + p2.y) / 2 - pinch.top
+      setView((v) => ({ ...v, s: s2, tx: mx - pinch.wx * s2, ty: my - pinch.wy * s2 }))
+      return
+    }
     const d = dragRef.current
     if (!d) return
     const dx = e.clientX - d.x
@@ -175,9 +185,18 @@ function MpCanvas({ hall, tables, findOrder, shiftOpen, nowMs, pulseTableId, onT
     if (Math.abs(dx) + Math.abs(dy) > 6) movedRef.current = true
     if (movedRef.current) setView((v) => ({ ...v, tx: d.tx + dx, ty: d.ty + dy }))
   }
-  const up = () => {
-    dragRef.current = null
-    setDragging(false)
+  const up = (e) => {
+    pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
+    if (pointersRef.current.size === 1 && view) {
+      // остался один палец — продолжаем pan без рывка
+      const [p] = [...pointersRef.current.values()]
+      dragRef.current = { x: p.x, y: p.y, tx: view.tx, ty: view.ty }
+    }
+    if (pointersRef.current.size === 0) {
+      dragRef.current = null
+      setDragging(false)
+    }
   }
 
   const layerCls = [
@@ -379,16 +398,16 @@ export default function MapView() {
       <header className="mp-header">
         <div className="mp-header-main">
           <h1 className="mp-title">Карта</h1>
-          <WorkplaceSwitcher />
+          {/* <WorkplaceSwitcher /> */}
         </div>
-        <button
+        {/* <button
           type="button"
           className="mp-edit-btn"
           aria-label="Редактор карты"
           onClick={() => navigate('/hall-editor')}
         >
           <PencilIcon width={18} height={18} />
-        </button>
+        </button> */}
       </header>
 
       {!currentId ? (

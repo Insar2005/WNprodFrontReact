@@ -1,33 +1,48 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkplaceStore } from '@/stores/workplace'
+import { useHallStore } from '@/stores/hall'
 import { useShiftStore } from '@/stores/shift'
 import { useOrderStore } from '@/stores/order'
-import { useHallStore } from '@/stores/hall'
 import { useUiStore } from '@/stores/ui'
 import { useUndoStack } from '@/hooks/useUndoStack'
 import { newId } from '@/utils/nanoid'
+import { pluralize } from '@/utils/pluralize'
 import HallEditorCanvas from './HallEditorCanvas'
-import HallFormModal from './HallFormModal'
+import { edClamp, ED_SNAP } from '@/utils/hallGeometry'
 import TableEditPanel from './TableEditPanel'
 import HallLayoutsPanel from './HallLayoutsPanel'
+import HallFormModal from './HallFormModal'
+import {
+  BackIcon,
+  ImportIcon,
+  UndoIcon,
+  RedoIcon,
+  PencilIcon,
+  StackIcon,
+  PlusIcon,
+} from '@/components/menu/menuIcons'
+import '@/styles/map-editor.css'
 import { useTelegramBackButton } from '@/hooks/useTelegramBackButton'
-
 /**
- * Hall editor. (Was HallEditorView.vue.)
+ * Редактор карты — 1:1 EdEditorScreen из прототипа waiter-note-map-editor
+ * (map-redesign/editor-screen.jsx). Полноэкранный роут.
  *
- * ── Vue → React notes ───────────────────────────────────────────────
- * - hall getters are methods → subscribe to raw halls/tables/activeHallId,
- *   derive sortedHalls/activeHall/tablesOfActive via useMemo.
- * - undoStack ops carry undo/redo closures; every mutating handler pushes
- *   the inverse. The hook's canUndo/canRedo are state → toolbar re-renders.
- * - editingTableId drives the TableEditPanel; we pass key={editingTableId}
- *   so the panel re-seeds its form on a different table (no setState-in-
- *   effect).
- * - pulseTableId via useState + a timer ref; nextTick → requestAnimationFrame.
- * - keyboard Ctrl/Cmd+Z / +Shift+Z (or +Y) → window keydown listener.
- * - route handle {hideBottomNav:true} set in the router.
- * ─────────────────────────────────────────────────────────────────────
+ *   • Топбар: «‹» · «Редактор карты» + «{зал} · N столов» · импорт ⤓ ·
+ *     undo ↶ / redo ↷ (хоткеи Ctrl+Z / Ctrl+Shift+Z сохранены).
+ *   • Табы залов: колонка — пилюля, у активной под ней мини-кнопки ✎
+ *     (настройки зала) и ⧉ (шаблоны); в конце пунктирная «＋ Зал».
+ *   • Канвас: 1:1 с Картой (dot-grid, рамка зала, зум с процентом);
+ *     drag со снапом 8 и clamp; выделение с угловыми ручками; FAB
+ *     «＋ Стол» внутри канваса (создаёт в центре видимой области,
+ *     пульс 2 c, сразу выделен).
+ *   • Панель стола (TableEditPanel) — контролы прототипа, механика
+ *     прежняя: live patchTableLocal + один PATCH и undo-операция при
+ *     закрытии.
+ *
+ * Unchanged (do not regress): операционный undo-стек 50 (реальные
+ * API-вызовы), защита удаления стола с активным заказом, умное применение
+ * шаблонов (HallLayoutsPanel), импорт по коду (/import).
  */
 export default function HallEditorView() {
   const navigate = useNavigate()
@@ -38,154 +53,78 @@ export default function HallEditorView() {
   const tables = useHallStore((s) => s.tables)
   const activeHallId = useHallStore((s) => s.activeHallId)
 
-  const canvasRef = useRef(null)
+  const canvasApi = useRef(null)
   const pulseTimer = useRef(null)
-
+  const dragPrev = useRef(null)
   const [editingTableId, setEditingTableId] = useState(null)
-  const [hallFormVisible, setHallFormVisible] = useState(false)
-  const [editingHall, setEditingHall] = useState(null)
-  const [layoutsPanelVisible, setLayoutsPanelVisible] = useState(false)
-  const [pulseTableId, setPulseTableId] = useState(null)
+  const [pulseId, setPulseId] = useState(null)
+  const [layoutsOpen, setLayoutsOpen] = useState(false)
+  const [hallForm, setHallForm] = useState(null) // null | {initial}
 
   const sortedHalls = useMemo(
     () => [...halls].sort((a, b) => a.position - b.position),
     [halls],
   )
   const activeHall = useMemo(
-    () => halls.find((h) => h.id === activeHallId) ?? null,
-    [halls, activeHallId],
+    () => halls.find((h) => h.id === activeHallId) ?? sortedHalls[0] ?? null,
+    [halls, activeHallId, sortedHalls],
   )
-  const tablesOfActive = useMemo(
-    () => tables.filter((t) => t.hall_id === activeHallId),
-    [tables, activeHallId],
+  const hallTables = useMemo(
+    () => (activeHall ? tables.filter((t) => t.hall_id === activeHall.id) : []),
+    [tables, activeHall],
   )
-  const isEmpty = halls.length === 0
-  const editingTablePanel = useMemo(
-    () => (editingTableId ? tables.find((t) => t.id === editingTableId) ?? null : null),
-    [editingTableId, tables],
+  const editingTable = editingTableId
+    ? hallTables.find((t) => t.id === editingTableId) || null
+    : null
+  const takenNumbers = useMemo(
+    () => hallTables.filter((t) => t.id !== editingTableId).map((t) => t.number),
+    [hallTables, editingTableId],
   )
+
+  // Хоткеи undo/redo (Ctrl/Cmd+Z, +Shift — redo).
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) undoStack.redo()
+        else undoStack.undo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undoStack])
 
   const pulse = (id) => {
-    setPulseTableId(id)
+    setPulseId(id)
     clearTimeout(pulseTimer.current)
-    pulseTimer.current = setTimeout(() => {
-      setPulseTableId((cur) => (cur === id ? null : cur))
-    }, 2000)
+    pulseTimer.current = setTimeout(() => setPulseId(null), 2100)
   }
 
-  // === Navigation ===
   const goBack = () => {
     if (window.history.length > 1) navigate(-1)
     else navigate('/map')
-  
   }
   useTelegramBackButton(goBack)
-  const goToImport = () => navigate('/import')
+  /* ── столы ── */
 
-  // === Hall form ===
-  const openHallCreate = () => {
-    setEditingHall(null)
-    setHallFormVisible(true)
+  // drag: live двигает patchTableLocal (в канвасе), конец — PATCH + undo
+  const onDragStart = (id) => {
+    const t = useHallStore.getState().tableById(id)
+    dragPrev.current = t ? { x: t.x, y: t.y } : null
   }
-  const openHallEdit = (h) => {
-    setEditingHall(h)
-    setHallFormVisible(true)
+  const onMoveLive = (id, x, y) => {
+    useHallStore.getState().patchTableLocal(id, { x, y })
   }
-  const closeHallForm = () => {
-    setHallFormVisible(false)
-    setEditingHall(null)
-  }
-
-  // === Layouts ===
-  const openLayouts = async () => {
-    const hall = useHallStore.getState()
-    if (!hall.activeHallId) return
-    setLayoutsPanelVisible(true)
+  const onDragEnd = async ({ id, x, y }) => {
+    const prev = dragPrev.current
+    dragPrev.current = null
+    if (!prev || (prev.x === x && prev.y === y)) return
     try {
-      await hall.fetchLayouts(hall.activeHallId)
-    } catch (e) {
-      useUiStore.getState().toastError(e.message)
-    }
-  }
-
-  const onLayoutApplied = ({ moved, created }) => {
-    const all = [...(moved || []), ...(created || [])]
-    if (all.length === 0) return
-    const firstId = all[0]
-    requestAnimationFrame(() => canvasRef.current?.centerOnTable(firstId))
-    pulse(firstId)
-  }
-
-  // === Table creation (one-tap) ===
-  const openTableCreate = async () => {
-    const hall = useHallStore.getState()
-    const ui = useUiStore.getState()
-    const active = hall.activeHall()
-    if (!active) return
-
-    const existing = hall.tablesOfHall(hall.activeHallId).map((t) => t.number)
-    let nextNum = 1
-    while (existing.includes(nextNum)) nextNum++
-
-    const center = canvasRef.current?.getViewportCenter?.() || { x: 0, y: 0 }
-    const w = 100
-    const h = 100
-    let x = Math.round(center.x - w / 2)
-    let y = Math.round(center.y - h / 2)
-    x = Math.max(0, Math.min(x, active.width - w))
-    y = Math.max(0, Math.min(y, active.height - h))
-
-    const id = newId()
-    const hallId = hall.activeHallId
-    const body = {
-      id,
-      number: nextNum,
-      x,
-      y,
-      width: w,
-      height: h,
-      rotation: 0,
-      border_radius: 16,
-    }
-    try {
-      await hall.createTable(hallId, body)
+      await useHallStore.getState().updateTable(id, { x, y })
       undoStack.push({
-        label: 'Создать стол',
+        label: 'Переместить стол',
         undo: async () => {
-          await useHallStore.getState().removeTable(id)
-        },
-        redo: async () => {
-          await useHallStore.getState().createTable(hallId, body)
-        },
-      })
-      pulse(id)
-    } catch (e) {
-      ui.toastError(e.message)
-    }
-  }
-
-  // === Canvas interactions ===
-  const onTableTap = (tableId) => {
-    if (editingTableId === tableId) {
-      setEditingTableId(null)
-      return
-    }
-    setEditingTableId(tableId)
-    requestAnimationFrame(() => canvasRef.current?.centerOnTable(tableId))
-  }
-
-  const onCanvasTap = () => {
-    if (editingTableId) setEditingTableId(null)
-  }
-
-  const onTableDrop = async ({ id, x, y, prevX, prevY }) => {
-    const hall = useHallStore.getState()
-    try {
-      await hall.updateTable(id, { x, y })
-      undoStack.push({
-        label: 'Передвинуть стол',
-        undo: async () => {
-          await useHallStore.getState().updateTable(id, { x: prevX, y: prevY })
+          await useHallStore.getState().updateTable(id, { x: prev.x, y: prev.y })
         },
         redo: async () => {
           await useHallStore.getState().updateTable(id, { x, y })
@@ -196,13 +135,12 @@ export default function HallEditorView() {
     }
   }
 
-  // === Edit panel callbacks ===
-  const onCommitEdit = async (tableId, patch, prevSnapshot) => {
-    const hall = useHallStore.getState()
+  // закрытие панели: один суммарный PATCH + undo-операция
+  const onCommitPanel = async (tableId, patch, snapshot) => {
     try {
-      await hall.updateTable(tableId, patch)
+      await useHallStore.getState().updateTable(tableId, patch)
       const undoPatch = {}
-      for (const key of Object.keys(patch)) undoPatch[key] = prevSnapshot[key]
+      for (const key of Object.keys(patch)) undoPatch[key] = snapshot[key]
       undoStack.push({
         label: 'Изменить стол',
         undo: async () => {
@@ -216,8 +154,6 @@ export default function HallEditorView() {
       useUiStore.getState().toastError(e.message)
     }
   }
-
-  const onCloseEditPanel = () => setEditingTableId(null)
 
   const onDeleteFromPanel = async (tableId, snapshot) => {
     setEditingTableId(null)
@@ -241,6 +177,17 @@ export default function HallEditorView() {
           setEditingTableId(tableId)
           return
         }
+      }
+    } else {
+      const ok = await ui.confirm({
+        title: `Удалить стол №${snapshot.number}?`,
+        message: 'Стол будет убран с карты зала.',
+        confirmText: 'Удалить',
+        danger: true,
+      })
+      if (!ok) {
+        setEditingTableId(tableId)
+        return
       }
     }
 
@@ -271,34 +218,24 @@ export default function HallEditorView() {
   }
 
   const onDuplicateFromPanel = async (snapshot) => {
-    setEditingTableId(null)
     const hall = useHallStore.getState()
     const ui = useUiStore.getState()
-
     const existing = hall.tablesOfHall(snapshot.hall_id).map((t) => t.number)
     let nextNum = 1
     while (existing.includes(nextNum)) nextNum++
-
-    const active = hall.activeHall()
-    const offset = 24
-    let newX = snapshot.x + offset
-    let newY = snapshot.y + offset
-    if (active) {
-      newX = Math.max(0, Math.min(newX, active.width - snapshot.width))
-      newY = Math.max(0, Math.min(newY, active.height - snapshot.height))
-    }
-
     const id = newId()
-    const body = {
+    const base = {
       id,
       number: nextNum,
-      x: newX,
-      y: newY,
+      x: snapshot.x + ED_SNAP * 2,
+      y: snapshot.y + ED_SNAP * 2,
       width: snapshot.width,
       height: snapshot.height,
       rotation: snapshot.rotation,
       border_radius: snapshot.border_radius,
     }
+    const hallObj = hall.halls.find((h) => h.id === snapshot.hall_id)
+    const body = hallObj ? { ...base, ...edClamp({ ...base }, hallObj) } : base
     try {
       await hall.createTable(snapshot.hall_id, body)
       undoStack.push({
@@ -310,180 +247,235 @@ export default function HallEditorView() {
           await useHallStore.getState().createTable(snapshot.hall_id, body)
         },
       })
-      ui.toastSuccess(`Создан стол №${nextNum}`)
-      requestAnimationFrame(() => canvasRef.current?.centerOnTable(id))
+      setEditingTableId(id)
       pulse(id)
     } catch (e) {
       ui.toastError(e.message)
     }
   }
 
-  // === Undo/Redo ===
-  const onUndo = async () => {
-    try {
-      await undoStack.undo()
-    } catch (e) {
-      useUiStore.getState().toastError(`Не удалось отменить: ${e.message}`)
+  // FAB «＋ Стол»: 56×56 в центре видимой области, снап, пульс, выделение
+  const addTable = async () => {
+    const hall = useHallStore.getState()
+    const ui = useUiStore.getState()
+    if (!activeHall) return
+    const existing = hall.tablesOfHall(activeHall.id).map((t) => t.number)
+    let nextNum = 1
+    while (existing.includes(nextNum)) nextNum++
+    const c = canvasApi.current?.center() || {
+      x: activeHall.width / 2,
+      y: activeHall.height / 2,
     }
-  }
-  const onRedo = async () => {
+    const id = newId()
+    const raw = {
+      number: nextNum,
+      x: Math.round((c.x - 28) / ED_SNAP) * ED_SNAP,
+      y: Math.round((c.y - 28) / ED_SNAP) * ED_SNAP,
+      width: 56,
+      height: 56,
+      rotation: 0,
+      border_radius: 12,
+    }
+    const pos = edClamp(raw, activeHall)
+    const body = { id, ...raw, x: pos.x, y: pos.y }
     try {
-      await undoStack.redo()
+      await hall.createTable(activeHall.id, body)
+      undoStack.push({
+        label: 'Создать стол',
+        undo: async () => {
+          await useHallStore.getState().removeTable(id)
+        },
+        redo: async () => {
+          await useHallStore.getState().createTable(activeHall.id, body)
+        },
+      })
+      setEditingTableId(id)
+      pulse(id)
     } catch (e) {
-      useUiStore.getState().toastError(`Не удалось повторить: ${e.message}`)
+      ui.toastError(e.message)
     }
   }
 
-  // Keyboard shortcuts + cleanup. undoStack.undo/redo and clear are stable.
-  useEffect(() => {
-    const onKey = (e) => {
-      const isUndo = (e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey
-      const isRedo =
-        (e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))
-      if (isUndo) {
-        e.preventDefault()
-        onUndo()
-      } else if (isRedo) {
-        e.preventDefault()
-        onRedo()
-      }
+  /* ── шаблоны ── */
+  const openLayouts = async () => {
+    const hall = useHallStore.getState()
+    if (!hall.activeHallId) return
+    setLayoutsOpen(true)
+    try {
+      await hall.fetchLayouts(hall.activeHallId)
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
     }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      undoStack.clear()
-      clearTimeout(pulseTimer.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }
+  const onLayoutApplied = ({ moved, created }) => {
+    const all = [...(moved || []), ...(created || [])]
+    if (all.length > 0) pulse(all[0])
+  }
 
-  const setActiveHall = (id) => useHallStore.getState().setActiveHall(id)
+  const tablesCountLabel = activeHall
+    ? `${activeHall.name} · ${hallTables.length} ${pluralize(hallTables.length, ['стол', 'стола', 'столов'])}`
+    : 'Нет залов'
 
   return (
-    <div className="ed-page">
-      <header className="ed-topbar">
-        {/* <button className="back-btn" onClick={goBack} aria-label="Назад">
-          ←
+    <div className="page ed2-page">
+      <header className="ed2-topbar">
+        {/* <button type="button" className="ed2-back" onClick={goBack} aria-label="Назад">
+          <BackIcon width={20} height={20} />
         </button> */}
-        <h1 className="ed-title">Карта столов</h1>
-        <div className="ed-topbar-actions">
-          <button className="ed-icon-btn" onClick={goToImport} title="Импортировать">
-            ⤓
-          </button>
-          <button
-            className="ed-icon-btn"
-            disabled={!undoStack.canUndo}
-            onClick={onUndo}
-            title="Отменить (Ctrl+Z)"
-          >
-            ↶
-          </button>
-          <button
-            className="ed-icon-btn"
-            disabled={!undoStack.canRedo}
-            onClick={onRedo}
-            title="Повторить (Ctrl+Shift+Z)"
-          >
-            ↷
-          </button>
+        <div className="ed2-topbar-main">
+          <h1 className="ed2-title">Редактор карты</h1>
+          <div className="ed2-sub">{tablesCountLabel}</div>
         </div>
+        <button
+          type="button"
+          className="ed2-icon-btn"
+          aria-label="Импорт по коду"
+          onClick={() => navigate('/import')}
+        >
+          <ImportIcon width={18} height={18} />
+        </button>
+        <button
+          type="button"
+          className="ed2-icon-btn"
+          aria-label="Отменить"
+          disabled={!undoStack.canUndo}
+          onClick={() => undoStack.undo()}
+        >
+          <UndoIcon width={18} height={18} />
+        </button>
+        <button
+          type="button"
+          className="ed2-icon-btn"
+          aria-label="Повторить"
+          disabled={!undoStack.canRedo}
+          onClick={() => undoStack.redo()}
+        >
+          <RedoIcon width={18} height={18} />
+        </button>
       </header>
 
       {!currentId ? (
-        <div className="ed-empty">
-          <p>Выберите заведение в Профиле</p>
+        <div className="mp-nohalls-wrap">
+          <div className="mp-nohalls">
+            <div className="mp-nohalls-title">Выберите заведение</div>
+            <div className="mp-nohalls-text">Заведение выбирается в Профиле</div>
+          </div>
+        </div>
+      ) : halls.length === 0 ? (
+        <div className="mp-nohalls-wrap">
+          <div className="mp-nohalls">
+            <div className="mp-nohalls-title">Залов пока нет</div>
+            <div className="mp-nohalls-text">
+              Создайте первый зал, чтобы расставлять столы
+            </div>
+            <button
+              type="button"
+              className="mp-nohalls-btn"
+              onClick={() => setHallForm({ initial: null })}
+            >
+              <PlusIcon width={16} height={16} /> Создать зал
+            </button>
+          </div>
         </div>
       ) : (
         <>
-          <div className="ed-halls-bar">
-            <div className="ed-halls-tabs">
-              {sortedHalls.map((h) => (
-                <button
-                  key={h.id}
-                  className={
-                    h.id === activeHallId ? 'ed-hall-tab ed-hall-tab--active' : 'ed-hall-tab'
-                  }
-                  onClick={() => setActiveHall(h.id)}
-                >
-                  {h.name}
-                </button>
-              ))}
-              <button className="ed-hall-tab ed-hall-tab--add" onClick={openHallCreate}>
-                + Зал
-              </button>
-            </div>
-            {activeHall && (
-              <>
-                <button
-                  className="ed-hall-edit-btn"
-                  onClick={openLayouts}
-                  title="Шаблоны расстановки"
-                  aria-label="Шаблоны расстановки"
-                >
-                  📋
-                </button>
-                <button
-                  className="ed-hall-edit-btn"
-                  onClick={() => openHallEdit(activeHall)}
-                  aria-label="Настройки зала"
-                >
-                  ⚙
-                </button>
-              </>
-            )}
+          <div className="ed2-tabs">
+            {sortedHalls.map((h) => {
+              const on = activeHall && h.id === activeHall.id
+              return (
+                <div key={h.id} className="ed2-tab-col">
+                  <button
+                    type="button"
+                    className={`mp-tab${on ? ' mp-tab--on' : ''}`}
+                    onClick={() => {
+                      useHallStore.getState().setActiveHall(h.id)
+                      setEditingTableId(null)
+                    }}
+                  >
+                    {h.name}
+                  </button>
+                  {on && (
+                    <div className="ed2-tab-mini-row">
+                      <button
+                        type="button"
+                        className="ed2-mini"
+                        aria-label="Настройки зала"
+                        onClick={() => setHallForm({ initial: h })}
+                      >
+                        <PencilIcon width={15} height={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="ed2-mini"
+                        aria-label="Шаблоны зала"
+                        onClick={openLayouts}
+                      >
+                        <StackIcon width={15} height={15} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            <button
+              type="button"
+              className="mp-tab mp-tab--ghost"
+              onClick={() => setHallForm({ initial: null })}
+            >
+              <PlusIcon width={14} height={14} /> Зал
+            </button>
           </div>
 
-          {isEmpty ? (
-            <div className="ed-empty">
-              <p className="empty-title">Залов пока нет</p>
-              <p className="empty-text">Создайте первый зал, чтобы расставлять столы.</p>
-              <button className="btn-primary" onClick={openHallCreate}>
-                Создать зал
-              </button>
-            </div>
-          ) : (
-            <div className="ed-canvas-area">
-              {activeHall && (
-                <HallEditorCanvas
-                  ref={canvasRef}
-                  hall={activeHall}
-                  tables={tablesOfActive}
-                  selectedId={editingTableId}
-                  pulseTableId={pulseTableId}
-                  onTableTap={onTableTap}
-                  onTableDrop={onTableDrop}
-                  onCanvasTap={onCanvasTap}
-                />
-              )}
-              {activeHall && !editingTableId && (
-                <button className="fab" onClick={openTableCreate} aria-label="Добавить стол">
-                  +
+          {activeHall && (
+            <HallEditorCanvas
+              hall={activeHall}
+              tables={hallTables}
+              selectedId={editingTableId}
+              pulseId={pulseId}
+              controlsHidden={!!editingTable}
+              apiRef={canvasApi}
+              onSelect={setEditingTableId}
+              onDragStart={onDragStart}
+              onMoveLive={onMoveLive}
+              onDragEnd={onDragEnd}
+            >
+              {!editingTable && (
+                <button type="button" className="ed2-fab" onClick={addTable}>
+                  <PlusIcon width={16} height={16} /> Стол
                 </button>
               )}
-            </div>
+            </HallEditorCanvas>
           )}
+          <div className="mp-canvas-spacer" aria-hidden />
         </>
       )}
 
-      {hallFormVisible && (
-        <HallFormModal initial={editingHall} onClose={closeHallForm} onSaved={closeHallForm} />
+      {editingTable && (
+        <TableEditPanel
+          key={editingTable.id}
+          table={editingTable}
+          takenNumbers={takenNumbers}
+          onClose={() => setEditingTableId(null)}
+          onCommit={onCommitPanel}
+          onDelete={onDeleteFromPanel}
+          onDuplicate={onDuplicateFromPanel}
+        />
       )}
 
-      <TableEditPanel
-        key={editingTableId || 'none'}
-        visible={!!editingTableId}
-        table={editingTablePanel}
-        onClose={onCloseEditPanel}
-        onCommit={onCommitEdit}
-        onDelete={onDeleteFromPanel}
-        onDuplicate={onDuplicateFromPanel}
-      />
+      {layoutsOpen && (
+        <HallLayoutsPanel
+          onClose={() => setLayoutsOpen(false)}
+          onApplied={onLayoutApplied}
+        />
+      )}
 
-      <HallLayoutsPanel
-        visible={layoutsPanelVisible}
-        onClose={() => setLayoutsPanelVisible(false)}
-        onApplied={onLayoutApplied}
-      />
+      {hallForm && (
+        <HallFormModal
+          initial={hallForm.initial}
+          onClose={() => setHallForm(null)}
+          onSaved={() => setHallForm(null)}
+        />
+      )}
     </div>
   )
 }

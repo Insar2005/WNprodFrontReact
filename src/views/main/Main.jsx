@@ -234,7 +234,7 @@ export default function Main() {
           </h1>
           <p className="hm-date">{todayLabel}</p>
         </div>
-        <WorkplaceSwitcher />
+        {/* <WorkplaceSwitcher /> */}
       </header>
 
       {isEmpty ? (
