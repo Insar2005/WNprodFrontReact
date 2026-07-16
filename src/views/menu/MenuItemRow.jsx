@@ -101,16 +101,6 @@ export default function MenuItemRow({
         onClick={handleClick}
         onAnimationEnd={() => setBump(false)}
       >
-        {mode === 'pick' && onInfo && (
-          <button
-            type="button"
-            className="mir-info-btn"
-            onClick={handleInfo}
-            aria-label="Подробнее"
-          >
-            <InfoIcon width={22} height={22} />
-          </button>
-        )}
         {mode === 'edit' && (
           <span className="mir-edit-hint" aria-hidden="true">
             <PencilIcon width={20} height={20} />
@@ -142,6 +132,19 @@ export default function MenuItemRow({
           {item.portion && <span className="mir-portion">{item.portion}</span>}
           <span className="mir-price">{formatMoney(item.price, currency)}</span>
         </div>
+
+        {/* ⓘ — на правом краю (доступна и при выбранной позиции;
+            название всегда получает место слева) */}
+        {mode === 'pick' && onInfo && (
+          <button
+            type="button"
+            className="mir-info-btn"
+            onClick={handleInfo}
+            aria-label="Подробнее"
+          >
+            <InfoIcon width={22} height={22} />
+          </button>
+        )}
       </div>
     </div>
   )

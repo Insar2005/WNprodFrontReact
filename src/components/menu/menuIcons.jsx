@@ -149,6 +149,76 @@ export function MapIcon({ width = 17, height = 17, ...props }) {
   )
 }
 
+/** Fit — вписать зал в экран (зум-контролы карты/редактора). */
+export function FitIcon({ width = 17, height = 17, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <circle cx="12" cy="12" r="6" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+    </svg>
+  )
+}
+
+/** Undo / Redo — редактор карты. */
+export function UndoIcon({ width = 18, height = 18, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="m8 5-4 4 4 4" />
+      <path d="M4 9h10.5a5 5 0 0 1 0 10H11" />
+    </svg>
+  )
+}
+export function RedoIcon({ width = 18, height = 18, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="m16 5 4 4-4 4" />
+      <path d="M20 9H9.5a5 5 0 0 0 0 10H13" />
+    </svg>
+  )
+}
+
+/** Import — импорт по коду (редактор карты). */
+export function ImportIcon({ width = 18, height = 18, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="M12 4v10" />
+      <path d="m8 10.5 4 4 4-4" />
+      <path d="M4.5 19.5h15" />
+    </svg>
+  )
+}
+
+/** Stack — шаблоны зала. */
+export function StackIcon({ width = 15, height = 15, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="M12 3 3 8l9 5 9-5-9-5Z" />
+      <path d="m3.5 12.7 8.5 4.8 8.5-4.8" />
+      <path d="m3.5 16.7 8.5 4.8 8.5-4.8" />
+    </svg>
+  )
+}
+
+/** Dots — меню «…» шаблона. */
+export function DotsIcon({ width = 18, height = 18, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <circle cx="5" cy="12" r="0.9" fill="currentColor" />
+      <circle cx="12" cy="12" r="0.9" fill="currentColor" />
+      <circle cx="19" cy="12" r="0.9" fill="currentColor" />
+    </svg>
+  )
+}
+
+/** Back — «‹» в топбарах полноэкранных роутов. */
+export function BackIcon({ width = 20, height = 20, ...props }) {
+  return (
+    <svg width={width} height={height} {...BASE} {...props}>
+      <path d="m15 5-7 7 7 7" />
+    </svg>
+  )
+}
+
 /** Chair — table plate in the order cart (replaces the 🪑 emoji). */
 export function ChairIcon({ width = 18, height = 18, ...props }) {
   return (

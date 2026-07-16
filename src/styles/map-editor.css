@@ -1,0 +1,692 @@
+/* ==========================================================================
+   Карта (mp-*) + Редактор карты (ed2-*) — июль 2026, прототип
+   waiter-note-map-editor (map-redesign/). ЕДИНСТВЕННЫЙ источник стилей;
+   старые map-, hsw-, ed-, tep- стили из global.css удаляются поэтапно. Значения 1:1.
+   ========================================================================== */
+
+/* Пульс стола на Карте (mpPulse из prototype.html): кольцо accent 55% → 11px */
+@keyframes mp-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wn-accent) 55%, transparent); }
+  70% { box-shadow: 0 0 0 11px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ── Карта: страница/шапка ── */
+.mp-page { padding: 0; height: 100%; display: flex; flex-direction: column; }
+.mp-header {
+  padding: 4px 16px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 40;
+}
+.mp-header-main { flex: 1; min-width: 0; }
+.mp-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--wn-ink); line-height: 1.25; }
+.mp-header-main .switcher { display: block; margin-top: 6px; }
+.mp-edit-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-edit-btn:active { background: var(--wn-bg-recessed); }
+
+/* ── Табы залов (общие для карты и редактора) ── */
+.mp-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.mp-tabs::-webkit-scrollbar { display: none; }
+.mp-tab {
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 15px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--wn-dur-fast) var(--wn-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-tab:active { background: var(--wn-bg-recessed); }
+.mp-tab--on { border-color: transparent; background: var(--wn-accent-fill); color: var(--wn-accent-text); }
+.mp-tab--on:active { opacity: 0.85; background: var(--wn-accent-fill); }
+.mp-tab--ghost {
+  border: 1px dashed var(--wn-glass-border);
+  background: transparent;
+  color: var(--wn-ink-mute);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* сводка занятости */
+.mp-summary {
+  padding: 0 18px 8px;
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ── Канвас ── */
+.mp-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 16px;
+  border-radius: 14px;
+  overflow: hidden;
+  touch-action: none;
+  background-color: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  background-image: radial-gradient(var(--wn-glass-border) 1.2px, transparent 1.2px);
+  cursor: grab;
+}
+.mp-canvas--dragging { cursor: grabbing; }
+.mp-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  transition: transform 180ms var(--wn-ease), opacity 250ms var(--wn-ease);
+}
+.mp-layer--nt { transition: none; }
+.mp-layer--dim { opacity: 0.55; }
+.mp-canvas-spacer { height: 12px; flex-shrink: 0; }
+
+/* стол на карте */
+.mp-table {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--wn-bg-recessed);
+  border: 1px solid var(--wn-glass-border-subtle);
+}
+.mp-table:active { opacity: 0.85; }
+.mp-table--occ { background: var(--wn-accent-fill); border-color: var(--wn-accent-soft); }
+.mp-table--pulse { animation: mp-pulse 1s var(--wn-ease) 2; }
+.mp-table-inner { position: absolute; inset: 0; }
+.mp-table-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+.mp-table-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.mp-table--occ .mp-table-num { font-weight: 700; color: var(--wn-accent-text); }
+.mp-table-sum {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.mp-table-timer {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.mp-table-timer-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--wn-warn); }
+.mp-table-timer-text {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--wn-ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+.mp-table-timer-text--warn { color: var(--wn-warn); }
+.mp-table-served {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--wn-accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* плашка «смена не открыта» */
+.mp-locked {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  background: var(--wn-bg-recessed);
+  border-left: 3px solid var(--wn-warn);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--wn-ink-soft);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* зум-контролы */
+.mp-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.mp-zoom-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-zoom-btn:active { background: var(--wn-bg-recessed); }
+.mp-zoom-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wn-ink-mute);
+  font-variant-numeric: tabular-nums;
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 999px;
+  padding: 3px 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* пустое состояние «залов нет» (карта и редактор) */
+.mp-nohalls-wrap { flex: 1; display: flex; align-items: center; padding: 0 16px 60px; }
+.mp-nohalls {
+  width: 100%;
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 14px;
+  padding: 22px 18px;
+  text-align: center;
+}
+.mp-nohalls-title { font-size: 17px; font-weight: 600; color: var(--wn-ink); }
+.mp-nohalls-text { font-size: 13px; color: var(--wn-ink-mute); line-height: 1.45; margin: 6px 0 16px; }
+.mp-nohalls-btn {
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 12px;
+  border: none;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-nohalls-btn:active { opacity: 0.85; }
+
+/* ==========================================================================
+   РЕДАКТОР (ed2-*)
+   ========================================================================== */
+.ed2-page { padding: 0; height: 100%; display: flex; flex-direction: column; position: relative; }
+.ed2-topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px 10px;
+  flex-shrink: 0;
+}
+.ed2-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  color: var(--wn-ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: -8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-back:active { background: var(--wn-bg-recessed); }
+.ed2-topbar-main { flex: 1; min-width: 0; }
+.ed2-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--wn-ink); line-height: 1.2; }
+.ed2-sub {
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ed2-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-icon-btn:active { background: var(--wn-bg-recessed); }
+.ed2-icon-btn:disabled { color: var(--wn-ink-faint); cursor: default; background: var(--wn-bg-elevated); }
+
+/* табы залов: колонка «пилюля + мини-кнопки под активной» */
+.ed2-tabs {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0 16px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.ed2-tabs::-webkit-scrollbar { display: none; }
+.ed2-tab-col { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex-shrink: 0; }
+.ed2-tab-mini-row { display: flex; gap: 8px; }
+.ed2-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-mini:active { background: var(--wn-bg-recessed); }
+
+/* полотно: рамка зала */
+.ed2-hall-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  border: 1.5px solid var(--wn-glass-border);
+  border-radius: 12px;
+}
+.ed2-empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.ed2-empty-hint span {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  text-align: center;
+  padding: 0 40px;
+  line-height: 1.5;
+}
+
+/* стол в редакторе */
+.ed2-table {
+  position: absolute;
+  box-sizing: border-box;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--wn-bg-recessed);
+  border: 1px solid var(--wn-glass-border-subtle);
+  cursor: grab;
+  transition: transform 120ms var(--wn-ease), box-shadow 120ms var(--wn-ease);
+}
+.ed2-table--sel { border: 2px solid var(--wn-accent); }
+.ed2-table--drag { cursor: grabbing; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22); transition: none; }
+.ed2-table--pulse { animation: wn-pulse 1s var(--wn-ease) 2; }
+.ed2-table-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ed2-table-num { font-size: 14px; font-weight: 600; color: var(--wn-ink); font-variant-numeric: tabular-nums; }
+.ed2-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--wn-accent);
+  border: 2px solid var(--wn-bg-elevated);
+}
+
+/* FAB «＋ Стол» внутри канваса */
+.ed2-fab {
+  position: absolute;
+  right: 10px;
+  bottom: 182px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--wn-accent) 45%, transparent);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-fab:active { opacity: 0.85; }
+
+/* ── Панель стола: низ-шит ≤48%, канвас виден ── */
+.ed2-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  max-height: 48%;
+  background: var(--wn-bg);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: wns-up 0.25s var(--wn-ease);
+}
+.ed2-panel-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--wn-bg-recessed);
+  margin: 8px auto 0;
+  flex-shrink: 0;
+}
+.ed2-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 10px;
+  flex-shrink: 0;
+}
+.ed2-panel-title { font-size: 17px; font-weight: 600; color: var(--wn-ink); flex-shrink: 0; }
+.ed2-num-input {
+  box-sizing: border-box;
+  width: 72px;
+  height: 40px;
+  text-align: center;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.ed2-num-input--bad { border: 1.5px solid var(--wn-danger); }
+.ed2-num-conflict { font-size: 11px; font-weight: 500; color: var(--wn-danger); }
+.ed2-panel-spacer { flex: 1; }
+.ed2-panel-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--wn-bg-recessed);
+  color: var(--wn-ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 12px;
+  padding-bottom: max(12px, var(--wn-safe-bottom, 0px));
+  scrollbar-width: none;
+}
+.ed2-panel-body::-webkit-scrollbar { display: none; }
+
+.ed2-slide-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
+.ed2-slide-label { width: 64px; font-size: 13px; color: var(--wn-ink-soft); flex-shrink: 0; }
+.ed2-slide { flex: 1; accent-color: var(--wn-accent); height: 28px; margin: 0; }
+.ed2-slide-val {
+  width: 52px;
+  text-align: right;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  font-variant-numeric: tabular-nums;
+}
+.ed2-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 10px 0 8px;
+}
+.ed2-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wn-ink-mute);
+}
+.ed2-val { font-size: 13px; font-weight: 600; color: var(--wn-ink); font-variant-numeric: tabular-nums; }
+.ed2-reset {
+  border: none;
+  background: none;
+  color: var(--wn-accent-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 4px;
+  border-radius: 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-tiles { display: flex; gap: 8px; }
+.ed2-tile {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-ink-soft);
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-tile:active { background: var(--wn-bg-recessed); }
+.ed2-tile--on { border-color: transparent; background: var(--wn-accent-fill); color: var(--wn-accent-text); }
+.ed2-tile-rect { width: 16px; height: 16px; border: 1.5px solid currentColor; border-radius: 2px; flex-shrink: 0; }
+.ed2-tile-circle { width: 16px; height: 16px; border: 1.5px solid currentColor; border-radius: 999px; flex-shrink: 0; }
+
+.ed2-actions { display: flex; gap: 8px; margin-top: 10px; }
+.ed2-act {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--wn-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-act:active { background: var(--wn-bg-recessed); }
+.ed2-act--danger { color: var(--wn-danger); }
+.ed2-act--primary { flex: 1.1; border: none; background: var(--wn-accent); color: #fff; font-weight: 600; }
+.ed2-act--primary:active { opacity: 0.85; }
+
+/* ── Шаблоны ── */
+.ed2-tpl-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+  color: var(--wn-accent-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-tpl-save:active { background: var(--wn-bg-recessed); }
+.ed2-tpl-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ed2-tpl-empty { padding: 22px 16px; text-align: center; font-size: 13px; color: var(--wn-ink-mute); }
+.ed2-tpl-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  background: var(--wn-bg-elevated);
+}
+.ed2-tpl-main { flex: 1; min-width: 0; }
+.ed2-tpl-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--wn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed2-tpl-meta { font-size: 12px; color: var(--wn-ink-mute); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.ed2-tpl-apply {
+  border: none;
+  background: var(--wn-accent-fill);
+  color: var(--wn-accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-tpl-apply:active { opacity: 0.85; }
+.ed2-tpl-dots {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--wn-ink-mute);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-tpl-dots:active { background: var(--wn-bg-recessed); }
+.ed2-tpl-backdrop { position: fixed; inset: 0; z-index: 5; }
+.ed2-tpl-menu {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 10px;
+  z-index: 6;
+  min-width: 160px;
+  background: var(--wn-bg-elevated);
+  border-radius: 12px;
+  border: 1px solid var(--wn-glass-border-subtle);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.ed2-tpl-menu-item {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--wn-ink);
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed2-tpl-menu-item:active { background: var(--wn-bg-recessed); }
+.ed2-tpl-menu-item--danger { color: var(--wn-danger); border-top: 1px solid var(--wn-glass-border-subtle); }
+
+/* Fullscreen Telegram: топбар редактора (hideBottomNav → .app-content--full
+   без верхнего паддинга) сам уходит из-под оверлея — контракт ob-header. */
+html[data-tg-fullscreen='true'] .ed2-topbar {
+  padding-top: max(90px, calc(12px + var(--wn-safe-top)));
+}
