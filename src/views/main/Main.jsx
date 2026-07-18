@@ -46,9 +46,10 @@ function itemCount(o) {
   return (o.items || []).reduce((s, i) => s + (i.quantity || 0), 0)
 }
 function servedCount(o) {
-  return (o.items || [])
-    .filter((i) => i.served)
-    .reduce((s, i) => s + (i.quantity || 0), 0)
+  return (o.items || []).reduce(
+    (s, i) => s + Math.min(Number(i.served) || 0, i.quantity || 0),
+    0,
+  )
 }
 
 /* ── Строка ближайшего напоминания ── */
@@ -234,7 +235,7 @@ export default function Main() {
           </h1>
           <p className="hm-date">{todayLabel}</p>
         </div>
-        {/* <WorkplaceSwitcher /> */}
+        <WorkplaceSwitcher />
       </header>
 
       {isEmpty ? (

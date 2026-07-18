@@ -51,20 +51,23 @@ import '@/styles/order-sheet.css'
 
 /* ── строка позиции (общая для активного и чека) ── */
 function PosRow({ item, currency, editable, onTap, onDelete }) {
-  const qty = Number(item.quantity) || 0
-  // Если есть _servedCount — используем его, иначе из булевого флага
-  const servedCount = Number(item._servedCount ?? (item.served ? qty : 0))
-  const done = servedCount >= qty
-  const partial = servedCount > 0 && !done
+  const qty = item.quantity || 1
+  const srv = Math.min(Number(item.served) || 0, qty)
+  const full = srv >= qty
+  const part = srv > 0 && !full
   const inner = (
     <>
       {editable && (
-        <span className={`uo-pos-served${done ? ' uo-pos-served--on' : ''}`} aria-hidden>
-          {done ? <CheckIcon width={15} height={15} /> : partial ? `${servedCount}/${qty}` : ''}
+        <span
+          className={`uo-pos-served${full ? ' uo-pos-served--on' : ''}${part ? ' uo-pos-served--part' : ''}`}
+          aria-hidden
+        >
+          {full && <CheckIcon width={15} height={15} />}
+          {part && <span className="uo-pos-served-count">{srv}/{qty}</span>}
         </span>
       )}
       <span className="uo-pos-main">
-        <span className={`uo-pos-title${editable && done ? ' uo-pos-title--served' : ''}`}>
+        <span className={`uo-pos-title${editable && full ? ' uo-pos-title--served' : ''}`}>
           {item.title}
         </span>
         <span className="uo-pos-price">
@@ -88,7 +91,6 @@ function PosRow({ item, currency, editable, onTap, onDelete }) {
       )}
     </>
   )
-  
   if (!editable) return <div className="uo-pos">{inner}</div>
   return (
     <button type="button" className="uo-pos uo-pos--tap" onClick={onTap}>
@@ -217,10 +219,11 @@ export default function OrderDetailsSheet({
   const items = useMemo(() => liveOrder?.items || [], [liveOrder])
 
   const pos = items.reduce((s, i) => s + (i.quantity || 0), 0)
-  const served = items.reduce((s, i) => {
-  const qty = Number(i.quantity) || 0
-  return s + (Number(i._servedCount ?? (i.served ? qty : 0)) || 0)
-}, 0)
+  // поштучно: подано = сумма served-счётчиков (клампим на всякий)
+  const served = items.reduce(
+    (s, i) => s + Math.min(Number(i.served) || 0, i.quantity || 0),
+    0,
+  )
   const total = liveOrder?.total_price || 0
 
   const guests = useMemo(
@@ -242,53 +245,35 @@ export default function OrderDetailsSheet({
   const title =
     liveOrder.table_number != null ? `Стол №${liveOrder.table_number}` : 'Заказ без стола'
 
-  
+  /* ── обработчики (store-логика прежняя) ── */
 
   const onToggleServed = async (item) => {
-  hapticImpact('light')
-  try {
-    await useOrderStore.getState().toggleItemServed(liveOrder.id, item.id)
-  } catch (e) {
-    useUiStore.getState().toastError(e.message)
+    hapticImpact('light')
+    try {
+      await useOrderStore.getState().toggleItemServed(liveOrder.id, item.id)
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
+    }
   }
-}
 
   const onServeAll = async () => {
-  if (busy) return
-  hapticImpact('light')
-  setBusy(true)
-  try {
-    const store = useOrderStore.getState()
-    const pending = items.filter((i) => {
-      const qty = Number(i.quantity) || 0
-      const servedCount = Number(i._servedCount ?? (i.served ? qty : 0))
-      return servedCount < qty
-    })
-    
-    for (const i of pending) {
-      await store.updateOrderItem(i.id, { served: true })
+    if (busy) return
+    hapticImpact('light')
+    setBusy(true)
+    try {
+      const store = useOrderStore.getState()
+      const pending = items.filter(
+        (i) => (Number(i.served) || 0) < (i.quantity || 1),
+      )
+      for (const i of pending) {
+        await store.updateOrderItem(i.id, { served: i.quantity || 1 })
+      }
+    } catch (e) {
+      useUiStore.getState().toastError(e.message)
+    } finally {
+      setBusy(false)
     }
-    
-    // Обновляем локально все позиции
-    useOrderStore.setState({
-      orders: useOrderStore.getState().orders.map((o) =>
-        o.id === liveOrder.id
-          ? {
-              ...o,
-              items: o.items.map((item) => {
-                const qty = Number(item.quantity) || 0
-                return { ...item, _servedCount: qty, served: true }
-              }),
-            }
-          : o,
-      ),
-    })
-  } catch (e) {
-    useUiStore.getState().toastError(e.message)
-  } finally {
-    setBusy(false)
   }
-}
 
   const onDeleteItem = async (item) => {
     const ui = useUiStore.getState()

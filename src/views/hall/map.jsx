@@ -51,7 +51,8 @@ function MpTable({ t, order, nowMs, pulse, onTap }) {
     : 0
   const long = occ && mins > 30
   const items = order?.items || []
-  const all = occ && items.length > 0 && items.every((i) => i.served)
+  const all =
+    occ && items.length > 0 && items.every((i) => (Number(i.served) || 0) >= (i.quantity || 1))
   const cls = [
     'mp-table',
     occ ? 'mp-table--occ' : '',
@@ -398,16 +399,16 @@ export default function MapView() {
       <header className="mp-header">
         <div className="mp-header-main">
           <h1 className="mp-title">Карта</h1>
-          {/* <WorkplaceSwitcher /> */}
+          <WorkplaceSwitcher />
         </div>
-        {/* <button
+        <button
           type="button"
           className="mp-edit-btn"
           aria-label="Редактор карты"
           onClick={() => navigate('/hall-editor')}
         >
           <PencilIcon width={18} height={18} />
-        </button> */}
+        </button>
       </header>
 
       {!currentId ? (

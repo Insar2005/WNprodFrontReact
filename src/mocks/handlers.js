@@ -972,7 +972,7 @@ function recomputeTableStatusForOrder(orderId) {
     t.status = 'waiting'
     return
   }
-  const allServed = items.every((i) => i.served)
+  const allServed = items.every((i) => (i.served || 0) >= i.quantity)
   t.status = allServed ? 'occupied' : 'waiting'
 }
 
@@ -1037,7 +1037,7 @@ function buildOrder({ orderId, shift, tableId, items, comments, guestsCount }) {
       total_price: round2(raw.price * raw.quantity),
       comment: raw.comment ?? null,
       guest: raw.guest ?? 1,
-      served: false,
+      served: 0,
     })
   }
   recomputeOrderTotal(order.id)
@@ -1167,7 +1167,7 @@ export async function addOrderItems(orderId, items) {
         total_price: round2(raw.price * raw.quantity),
         comment: raw.comment ?? null,
         guest: raw.guest ?? 1,
-        served: false,
+        served: 0,
       })
     }
     recomputeOrderTotal(o.id)
@@ -1199,7 +1199,10 @@ export async function updateOrderItem(itemId, patch) {
     if (patch.price !== undefined) oi.price = patch.price
     if (patch.quantity !== undefined) oi.quantity = patch.quantity
     if (patch.comment !== undefined) oi.comment = patch.comment
-    if (patch.served !== undefined) oi.served = !!patch.served
+    if (patch.served !== undefined) {
+      const n = parseInt(patch.served, 10) || 0
+      oi.served = Math.max(0, Math.min(n, oi.quantity))
+    }
     oi.total_price = round2(oi.price * oi.quantity)
     recomputeOrderTotal(o.id)
     o.updated_at = utcTs()
@@ -1316,7 +1319,7 @@ export async function editPaidOrder(orderId, patch) {
           total_price: round2(price * qty),
           comment: raw.comment ?? null,
           guest: raw.guest ?? 1,
-          served: false,
+          served: 0,
         })
       }
       recomputeOrderTotal(o.id)

@@ -206,6 +206,12 @@ function subscribeToInsetEvents() {
 }
 
 export function initTelegram() {
+
+  // Нативное подтверждение закрытия мини-аппа (Bot API 6.2+): защищает от
+  // случайного свайпа вниз посреди заказа или правки карты.
+  if (typeof tg?.isVersionAtLeast === 'function' && tg.isVersionAtLeast('6.2')) {
+    tg.enableClosingConfirmation()
+  }
   if (!tg) {
     publishInsets()
     return

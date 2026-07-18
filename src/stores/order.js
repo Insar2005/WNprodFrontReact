@@ -222,70 +222,24 @@ export const useOrderStore = create((set, get) => ({
     return updated
   },
 
- toggleItemServed: async (orderId, itemId) => {
-  const ord = get().orderById(orderId)
-  if (!ord) return null
-  const item = (ord.items || []).find((i) => i.id === itemId)
-  if (!item) return null
+  /**
+   * Toggle the "served" flag on a single line item. Optimistic so the
+   * checkbox feels instant; on server failure we revert and rethrow.
+   */
+  /**
+   * Поштучная подача: каждый тап +1 к served (0 → 1 → … → quantity),
+   * тап по полностью поданной сбрасывает в 0. quantity=1 — обычный toggle.
+   */
+  toggleItemServed: async (orderId, itemId) => {
+    const ord = get().orderById(orderId)
+    if (!ord) return null
+    const item = (ord.items || []).find((i) => i.id === itemId)
+    if (!item) return null
+    const cur = Math.min(Number(item.served) || 0, item.quantity)
+    const next = cur >= item.quantity ? 0 : cur + 1
+    return get().updateOrderItem(itemId, { served: next })
+  },
 
-  const maxQty = Number(item.quantity) || 0
-  const currentServed = Number(item._servedCount ?? (item.served ? maxQty : 0))
-  
-  let next
-  let fullyServed
-
-  if (currentServed >= maxQty) {
-    // Всё подано → сбрасываем в 0
-    next = 0
-    fullyServed = false
-  } else {
-    // Инкремент
-    next = currentServed + 1
-    fullyServed = next >= maxQty
-  }
-
-  const prev = currentServed
-
-  // Optimistic update
-  set({
-    orders: get().orders.map((o) =>
-      o.id === orderId
-        ? {
-            ...o,
-            items: o.items.map((i) =>
-              i.id === itemId 
-                ? { ...i, _servedCount: next, served: fullyServed } 
-                : i,
-            ),
-          }
-        : o,
-    ),
-  })
-
-  try {
-    // Шлём на бэк булево: true когда всё подано, false в остальных случаях
-    const updated = await ordersApi.updateItem(itemId, { served: fullyServed })
-    get().replaceLocal(updated)
-    return updated
-  } catch (e) {
-    // Revert on failure
-    set({
-      orders: get().orders.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              items: o.items.map((i) =>
-                i.id === itemId 
-                  ? { ...i, _servedCount: prev, served: prev >= maxQty } 
-                  : i,
-              ),
-            }
-          : o,
-      ),
-    })
-    throw e
-  }
-},
   removeOrderItem: async (itemId) => {
     const updated = await ordersApi.removeItem(itemId)
     get().replaceLocal(updated)

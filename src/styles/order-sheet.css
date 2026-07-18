@@ -80,6 +80,13 @@
   transition: background var(--wn-dur-fast) var(--wn-ease);
 }
 .uo-pos-served--on { border: none; background: var(--wn-accent); }
+.uo-pos-served--part { border: none; background: var(--wn-accent-fill); }
+.uo-pos-served-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--wn-accent-text);
+  font-variant-numeric: tabular-nums;
+}
 .uo-pos-main { flex: 1; min-width: 0; }
 .uo-pos-title {
   display: block;
@@ -445,7 +452,17 @@
 /* ==========================================================================
    История заказов (ohs-*) — лента по сменам
    ========================================================================== */
-.ohs-page { padding: 0; padding-bottom: max(24px, var(--wn-safe-bottom, 0px), env(safe-area-inset-bottom)); }
+.ohs-page {
+  padding: 0;
+  padding-bottom: max(24px, var(--wn-safe-bottom, 0px), env(safe-area-inset-bottom));
+  /* .app-content--full не скроллит сам — лента истории скроллится страницей
+     (старый .oh-page делал так же, правило потерялось при редизайне) */
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.ohs-page::-webkit-scrollbar { display: none; }
 .ohs-header {
   padding: 0 10px 12px 6px;
   display: flex;

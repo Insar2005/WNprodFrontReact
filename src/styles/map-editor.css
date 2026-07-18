@@ -496,7 +496,8 @@
   flex: 1;
   overflow-y: auto;
   padding: 0 16px 12px;
-  padding-bottom: max(12px, var(--wn-safe-bottom, 0px));
+  /* запас под жестовую панель Android / home-индикатор */
+  padding-bottom: max(28px, calc(14px + var(--wn-safe-bottom, 0px)), env(safe-area-inset-bottom));
   scrollbar-width: none;
 }
 .ed2-panel-body::-webkit-scrollbar { display: none; }
@@ -539,29 +540,6 @@
   border-radius: 6px;
   -webkit-tap-highlight-color: transparent;
 }
-.ed2-tiles { display: flex; gap: 8px; }
-.ed2-tile {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  border: 1px solid var(--wn-glass-border-subtle);
-  background: var(--wn-bg-elevated);
-  color: var(--wn-ink-soft);
-  -webkit-tap-highlight-color: transparent;
-}
-.ed2-tile:active { background: var(--wn-bg-recessed); }
-.ed2-tile--on { border-color: transparent; background: var(--wn-accent-fill); color: var(--wn-accent-text); }
-.ed2-tile-rect { width: 16px; height: 16px; border: 1.5px solid currentColor; border-radius: 2px; flex-shrink: 0; }
-.ed2-tile-circle { width: 16px; height: 16px; border: 1.5px solid currentColor; border-radius: 999px; flex-shrink: 0; }
-
 .ed2-actions { display: flex; gap: 8px; margin-top: 10px; }
 .ed2-act {
   flex: 1;

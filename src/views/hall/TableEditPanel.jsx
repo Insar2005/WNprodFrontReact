@@ -159,18 +159,10 @@ export default function TableEditPanel({
         <Slide label="Ширина" value={form.width} display={form.width} min={32} max={220} step={4} onChange={setW} />
         <Slide label="Высота" value={form.height} display={form.height} min={32} max={220} step={4} onChange={setH} />
 
-        {/* <div className="ed2-row-head">
+        <div className="ed2-row-head">
           <span className="ed2-lbl">Форма</span>
           <span className="ed2-val">{pct}%</span>
         </div>
-        <div className="ed2-tiles">
-          <button type="button" className={`ed2-tile${pct === 0 ? ' ed2-tile--on' : ''}`} onClick={() => setPct(0)}>
-            <span className="ed2-tile-rect" aria-hidden /> Прямоугольник
-          </button>
-          <button type="button" className={`ed2-tile${pct === 100 ? ' ed2-tile--on' : ''}`} onClick={() => setPct(100)}>
-            <span className="ed2-tile-circle" aria-hidden /> Овал / Круг
-          </button>
-        </div> */}
         <Slide label="Скругление" value={pct} display={`${pct}%`} min={0} max={100} step={5} onChange={setPct} />
 
         <div className="ed2-row-head" style={{ margin: '8px 0 0' }}>
