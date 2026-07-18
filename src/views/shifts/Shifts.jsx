@@ -385,30 +385,30 @@ export default function Shifts() {
                 <div className="shh-list">
                   {g.shifts.map((s) => (
                     <button
-                      key={s.id}
-                      type="button"
-                      className="shh-row"
-                      onClick={() => setReport({ kind: 'closed', shift: s })}
-                    >
-                      <span className="shh-main">
-                        <span className="shh-date">{dayLabel(s.start_time)}</span>
-                        <span className="shh-meta">
-                          {formatTime(s.start_time)} – {formatTime(s.end_time)} ·{' '}
-                          {fmtDur(s.duration)} · {s.order_count}{' '}
-                          {pluralize(s.order_count, ['заказ', 'заказа', 'заказов'])}
-                        </span>
-                      </span>
-                      <span className="shh-right">
-                        <span className="shh-earned">
-                          {formatMoney(s.total_pay_for_shift, s.currency)}
-                        </span>
-                        {s.total_tips > 0 && (
-                          <span className="shh-tips">
-                            + {formatMoney(s.total_tips, s.currency)} чаевые
-                          </span>
-                        )}
-                      </span>
-                    </button>
+  key={s.id}
+  type="button"
+  className="shh-row"
+  onClick={() => setReport({ kind: 'closed', shift: s })}
+>
+  <div className="shh-main">
+    <div className="shh-date">{dayLabel(s.start_time)}</div>
+    <div className="shh-meta">
+      {formatTime(s.start_time)} – {formatTime(s.end_time)} ·{' '}
+      {fmtDur(s.duration)} · {s.order_count}{' '}
+      {pluralize(s.order_count, ['заказ', 'заказа', 'заказов'])}
+    </div>
+  </div>
+  <div className="shh-right">
+    <div className="shh-earned">
+      {formatMoney(s.total_pay_for_shift, s.currency)}
+    </div>
+    {s.total_tips > 0 && (
+      <div className="shh-tips">
+        + {formatMoney(s.total_tips, s.currency)} чаевые
+      </div>
+    )}
+  </div>
+</button>
                   ))}
                 </div>
               </div>
