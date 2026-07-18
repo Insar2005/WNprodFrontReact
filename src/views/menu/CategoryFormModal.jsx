@@ -8,7 +8,12 @@ import { newId } from '@/utils/nanoid'
  * Create / edit a menu category. (Was CategoryFormModal.vue.)
  * is_active checkbox only shown when editing.
  */
-export default function CategoryFormModal({ initial = null, onClose, onSaved }) {
+export default function CategoryFormModal({
+  initial = null,
+  parentId = null,
+  onClose,
+  onSaved,
+}) {
   const isEdit = !!initial
   const [saving, setSaving] = useState(false)
   const titleRef = useRef(null)
@@ -43,8 +48,13 @@ export default function CategoryFormModal({ initial = null, onClose, onSaved }) 
           setSaving(false)
           return
         }
-        await menu.createCategory(workplaceId, { id: newId(), title: form.title })
-        ui.toastSuccess('Категория создана')
+        await menu.createCategory(workplaceId, {
+          id: newId(),
+          title: form.title,
+          // null → корневая; id → подкатегория (кнопка «+ Подкатегория»)
+          parent_id: parentId || null,
+        })
+        ui.toastSuccess(parentId ? 'Подкатегория создана' : 'Категория создана')
       }
       onSaved?.()
     } catch (e) {
@@ -89,7 +99,11 @@ export default function CategoryFormModal({ initial = null, onClose, onSaved }) 
       <div className="sheet" role="dialog" aria-modal="true">
         <header className="sheet-header">
           <h3 className="sheet-title">
-            {isEdit ? 'Редактировать категорию' : 'Новая категория'}
+            {isEdit
+              ? 'Редактировать категорию'
+              : parentId
+                ? 'Новая подкатегория'
+                : 'Новая категория'}
           </h3>
           <button className="sheet-close" onClick={() => onClose?.()} aria-label="Закрыть">
             ×
