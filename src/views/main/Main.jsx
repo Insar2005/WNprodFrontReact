@@ -9,6 +9,7 @@ import { useNow } from '@/hooks/useNow'
 import { formatMoney } from '@/utils/format'
 import { pluralize } from '@/utils/pluralize'
 import WorkplaceSwitcher from '@/components/WorkplaceSwitcher'
+import SetupChecklist from './SetupChecklist'
 import {
   BellIcon,
   CheckIcon,
@@ -257,6 +258,8 @@ export default function Main() {
         </div>
       ) : (
         <div className={`hm-body${isOpen && currentId ? ' hm-body--fab' : ''}`}>
+          <SetupChecklist />
+
           {nearestReminder && (
             <ReminderRow
               reminder={nearestReminder}

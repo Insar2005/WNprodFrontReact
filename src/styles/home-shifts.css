@@ -766,3 +766,74 @@
   -webkit-tap-highlight-color: transparent;
 }
 .rep-delete:active { background: var(--wn-bg-recessed); }
+
+/* ==========================================================================
+   «Быстрый старт» (hm-setup-*) — онбординг на Главной (июль 2026).
+   Карточка из трёх шагов: залы → меню → первая смена. Исчезает, когда
+   все шаги выполнены.
+   ========================================================================== */
+.hm-setup {
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 14px;
+  padding: 12px 14px 6px;
+  margin-bottom: 12px;
+}
+.hm-setup-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.hm-setup-title { font-size: 15px; font-weight: 600; color: var(--wn-ink); }
+.hm-setup-progress {
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+.hm-setup-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 10px 8px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hm-setup-row:active { background: var(--wn-bg-recessed); }
+.hm-setup-row--next { background: var(--wn-accent-fill); }
+.hm-setup-row--next:active { opacity: 0.85; }
+.hm-setup-row + .hm-setup-row { margin-top: 2px; }
+.hm-setup-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--wn-glass-border);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.hm-setup-circle--done { border: none; background: var(--wn-accent); }
+.hm-setup-main { flex: 1; min-width: 0; }
+.hm-setup-step { display: block; font-size: 14px; font-weight: 500; color: var(--wn-ink); }
+.hm-setup-step--done {
+  color: var(--wn-ink-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--wn-ink-faint);
+}
+.hm-setup-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--wn-ink-mute);
+  margin-top: 1px;
+  line-height: 1.35;
+}
+.hm-setup-chevron { color: var(--wn-ink-faint); flex-shrink: 0; display: inline-flex; }

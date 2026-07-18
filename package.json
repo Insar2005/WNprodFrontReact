@@ -14,6 +14,7 @@
     "demo:preview": "vite preview --mode demo"
   },
   "dependencies": {
+    "@sentry/react": "^10.66.0",
     "axios": "^1.15.2",
     "nanoid": "^5.1.9",
     "react": "^19.2.0",
