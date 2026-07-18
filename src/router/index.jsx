@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import App from '@/App'
+import AppErrorBoundary from '@/components/AppErrorBoundary'
 
 // ── Vue Router → React Router mapping ───────────────────────────────
 // Vue Router                          React Router 7
@@ -32,6 +33,9 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <App />,
+    // Ловит и падения рендера, и протухшие после деплоя lazy-чанки
+    // (авто-перезагрузка) — вместо дефолтного «Hey developer».
+    errorElement: <AppErrorBoundary />,
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
       {

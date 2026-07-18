@@ -3470,3 +3470,46 @@ html[data-tg-fullscreen='true'] .ed-topbar {
     var(--wn-safe-bottom, 0px)
   );
 }
+
+/* ==========================================================================
+   Корневой экран ошибки (AppErrorBoundary) — в global.css, потому что
+   должен работать, даже когда lazy-чанки и их CSS недоступны.
+   ========================================================================== */
+.app-error {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--wn-bg);
+}
+.app-error-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--wn-bg-elevated);
+  border: 1px solid var(--wn-glass-border-subtle);
+  border-radius: 14px;
+  padding: 22px 18px;
+  text-align: center;
+}
+.app-error-title { font-size: 17px; font-weight: 600; color: var(--wn-ink); }
+.app-error-text {
+  font-size: 13px;
+  color: var(--wn-ink-mute);
+  line-height: 1.45;
+  margin: 8px 0 16px;
+}
+.app-error-btn {
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 12px;
+  border: none;
+  background: var(--wn-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.app-error-btn:active { opacity: 0.85; }

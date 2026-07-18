@@ -399,16 +399,16 @@ export default function MapView() {
       <header className="mp-header">
         <div className="mp-header-main">
           <h1 className="mp-title">Карта</h1>
-          <WorkplaceSwitcher />
+          {/* <WorkplaceSwitcher /> */}
         </div>
-        <button
+        {/* <button
           type="button"
           className="mp-edit-btn"
           aria-label="Редактор карты"
           onClick={() => navigate('/hall-editor')}
         >
           <PencilIcon width={18} height={18} />
-        </button>
+        </button> */}
       </header>
 
       {!currentId ? (
